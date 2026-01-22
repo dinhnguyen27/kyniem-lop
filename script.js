@@ -30,6 +30,15 @@ function filterByYear(year) {
     loadGallery(); // Tải lại ảnh theo năm đã chọn
 }
 
+// Kiểm tra trạng thái đăng nhập khi tải trang
+firebase.auth().onAuthStateChanged((user) => {
+    if (user) {
+        document.getElementById('login-box').style.display = 'none';
+    } else {
+        document.getElementById('login-box').style.display = 'block';
+    }
+});
+
 function loadGallery() {
     const gallery = document.getElementById('galleryGrid');
     if (!gallery) return;
@@ -57,9 +66,10 @@ function loadGallery() {
 
             const card = document.createElement('div');
             card.className = 'card';
+            card.setAttribute('data-aos', 'fade-up');
             card.innerHTML = `
                 <div class="media-wrap" onclick="openLightbox(this)">
-                    <img src="${data.url}">
+                    <img src="${data.url}"loading="lazy" alt="Kỷ niệm lớp">
                 </div>
                 <div class="comment-area">
                     <div class="reactions">
@@ -323,3 +333,4 @@ async function handleReact(postId, type) {
         console.error("Lỗi tương tác:", error);
     }
 }
+
