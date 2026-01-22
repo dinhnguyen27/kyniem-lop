@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kỷ Niệm Lớp Chúng Mình</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Quicksand:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <audio id="bg-music" loop>
+        <source src="data/nhac_nen.mp3" type="audio/mpeg">
+    </audio>
+
+    <div id="password-screen">
+        <div class="lock-box">
+            <h2>🔒 Kho tàng kỷ niệm</h2>
+            <p>Vui lòng nhập mật mã của lớp để tiếp tục</p>
+            <input type="password" id="pass-input" placeholder="Mật khẩu là gì nhỉ?">
+            <button onclick="checkPassword()">Mở khóa</button>
+            <p id="error-msg" style="color: #ff4d4d; display: none; margin-top: 10px;">Sai mật mã rồi bạn ơi! 🤫</p>
+        </div>
+    </div>
+
+    <div id="main-content" style="display: none;">
+        <header>
+            <h1>Hành Trình Thanh Xuân</h1>
+            <p>Nơi lưu giữ những mảnh ghép thời học sinh</p>
+        </header>
+
+        <div class="countdown-container">
+            <h3 id="countdown-title">Đếm ngược ngày thi Đại học</h3>
+            <div id="timer">
+                <span id="days">00</span> ngày <span id="hours">00</span>:<span id="minutes">00</span>:<span id="seconds">00</span>
+            </div>
+        </div>
+
+        <div style="text-align: center; margin: 20px;">
+            <button class="btn-surprise" onclick="showSurprise()">🎁 Xuyên không (Ngẫu nhiên)</button>
+        </div>
+        <div class="year-filter">
+            <button class="filter-btn active" onclick="filterByYear('all')">Tất cả</button>
+            <button class="filter-btn" onclick="filterByYear('2024')">2024</button>
+            <button class="filter-btn" onclick="filterByYear('2025')">2025</button>
+            <button class="filter-btn" onclick="filterByYear('2026')">2026</button>
+        </div>
+
+        <div class="gallery" id="galleryGrid">
+            </div>
+
+        <div id="leaf-container"></div>
+        <div style="text-align: center; margin-bottom: 20px;">
+            <small style="color: #666; cursor: pointer; text-decoration: underline;" 
+                onclick="changeMyName()">
+                Đổi tên bình luận
+            </small>
+        </div>
+        
+    </div>
+
+    <div id="lightbox" class="lightbox">
+        <span class="close-btn" onclick="closeLightbox()">&times;</span>
+        <div class="lightbox-content" id="lightboxContent"></div>
+        <div class="lightbox-tools">
+            <button onclick="changeZoom(0.8)">−</button>
+            <button onclick="changeZoom(1.2)">+</button>
+            <button onclick="doRotate()">⟳</button>
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    
+    <script src="script.js"></script>
+</body>
+</html>

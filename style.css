@@ -1,0 +1,424 @@
+/* Giao diện màn hình khóa */
+#password-screen {
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+}
+
+.lock-box {
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(15px);
+    padding: 40px;
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    text-align: center;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    color: white;
+}
+
+.lock-box input {
+    padding: 12px 20px;
+    border-radius: 25px;
+    border: none;
+    outline: none;
+    width: 250px;
+    margin-top: 20px;
+    background: rgba(255, 255, 255, 0.9);
+}
+
+.lock-box button {
+    padding: 12px 30px;
+    border-radius: 25px;
+    border: none;
+    background: #ff7e5f;
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+    margin-left: 10px;
+    transition: 0.3s;
+}
+
+.lock-box button:hover {
+    background: #feb47b;
+    transform: scale(1.05);
+}
+* { box-sizing: border-box; }
+body {
+    margin: 0;
+    font-family: 'Quicksand', sans-serif;
+    background: linear-gradient(-45deg, #ff9a9e, #fad0c4, #a1c4fd, #c2e9fb);
+    background-size: 400% 400%;
+    animation: gradientBG 15s ease infinite;
+    min-height: 100vh;
+    color: #333;
+}
+
+@keyframes gradientBG {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+header {
+    text-align: center;
+    padding: 50px 20px;
+}
+
+header h1 {
+    font-family: 'Dancing Script', cursive;
+    font-size: 3.5rem;
+    color: #fff;
+    text-shadow: 2px 4px 10px rgba(0,0,0,0.2);
+    margin: 0;
+}
+
+.upload-section {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 40px;
+}
+
+.upload-box {
+    background: rgba(255, 255, 255, 0.25);
+    backdrop-filter: blur(10px);
+    padding: 25px;
+    border-radius: 20px;
+    border: 1px solid rgba(255,255,255,0.4);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+    text-align: center;
+}
+
+.btn-primary {
+    background: #ff7e5f;
+    color: white;
+    border: none;
+    padding: 10px 25px;
+    border-radius: 50px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: 0.3s;
+}
+
+.btn-primary:hover { background: #feb47b; transform: scale(1.05); }
+
+.gallery {
+    column-count: 4; /* Số cột mặc định trên máy tính */
+    column-gap: 20px; /* Khoảng cách giữa các cột */
+    padding: 20px;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+.card {
+    display: inline-block; /* Quan trọng để ảnh không bị cắt ngang cột */
+    width: 100%;
+    margin-bottom: 20px; /* Khoảng cách giữa các hàng */
+    background: white;
+    border-radius: 15px;
+    overflow: hidden;
+    box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+    transition: transform 0.3s;
+}
+
+.card:hover {
+    transform: scale(1.02); /* Phóng nhẹ khi di chuột */
+    z-index: 10;
+}
+
+/* Điều chỉnh chiều cao tự nhiên */
+.media-wrap {
+    height: auto; /* Bỏ chiều cao cố định 200px trước đó */
+    cursor: zoom-in;
+}
+
+.media-wrap img, .media-wrap video {
+    width: 100%;
+    height: auto; /* Ảnh giữ nguyên tỉ lệ gốc */
+    display: block;
+}
+
+/* Điều chỉnh số cột trên điện thoại và máy tính bảng */
+@media (max-width: 1000px) {
+    .gallery { column-count: 3; }
+}
+@media (max-width: 700px) {
+    .gallery { column-count: 2; }
+}
+@media (max-width: 400px) {
+    .gallery { column-count: 1; }
+}
+
+/* Lightbox */
+.lightbox {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.9);
+    z-index: 1000;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.lightbox-content {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px; /* Tạo khoảng cách nhỏ với mép màn hình */
+    overflow: hidden; /* Giữ ảnh không tràn ra ngoài khi zoom quá to */
+}
+
+.lightbox-content img, .lightbox-content video {
+    /* Ép ảnh to ra nhưng vẫn không bị vỡ tỷ lệ */
+    width: auto;
+    height: auto;
+    min-width: 50vw; /* Đảm bảo ảnh không bao giờ quá nhỏ */
+    max-width: 95%; 
+    max-height: 85%; 
+    
+    object-fit: contain; /* Đảm bảo toàn bộ ảnh nằm gọn trong khung hình to nhất */
+    border-radius: 8px;
+    box-shadow: 0 0 50px rgba(0,0,0,0.8);
+    transition: transform 0.3s ease;
+}
+
+.close-btn {
+    position: absolute;
+    top: 20px; right: 30px;
+    color: white; font-size: 50px; cursor: pointer;
+}
+
+.lightbox-tools {
+    margin-top: 20px;
+    display: flex;
+    gap: 20px;
+}
+
+.lightbox-tools button {
+    width: 50px; height: 50px; border-radius: 50%; border: none;
+    background: white; font-size: 20px; cursor: pointer;
+}
+
+/* 1. Hiệu ứng Hoa phượng rơi */
+/* Container chứa hoa */
+#leaf-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 999;
+    overflow: hidden;
+}
+
+/* Cánh hoa phượng */
+.leaf {
+    position: absolute;
+    background: linear-gradient(135deg, #ff4d4d, #b30000);
+    border-radius: 100% 0% 100% 100%; /* Hình dáng cánh hoa thực tế */
+    opacity: 0.8;
+    pointer-events: none;
+    animation: fall linear infinite, swing ease-in-out infinite;
+}
+
+@keyframes fall {
+    0% { transform: translateY(-10vh) rotate(0deg); }
+    100% { transform: translateY(110vh) rotate(360deg); }
+}
+
+@keyframes swing {
+    0%, 100% { margin-left: 0; }
+    50% { margin-left: 30px; }
+}
+
+/* 2. Giao diện Đếm ngược */
+.countdown-container {
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(5px);
+    margin: 20px auto; padding: 15px;
+    width: fit-content; border-radius: 15px;
+    border: 1px solid rgba(255,255,255,0.3);
+    color: white; text-align: center;
+}
+#timer { font-size: 1.5rem; font-weight: bold; }
+
+/* 3. Nút Surprise */
+.btn-surprise {
+    background: #ff7e5f; color: white; border: none;
+    padding: 12px 25px; border-radius: 25px;
+    font-weight: bold; cursor: pointer;
+    box-shadow: 0 4px 15px rgba(255,126,95,0.4);
+    transition: 0.3s;
+}
+.btn-surprise:hover { transform: scale(1.1) rotate(3deg); background: #feb47b; }
+
+.reactions {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 10px;
+}
+.react-btn {
+    background: #f0f2f5;
+    border: none;
+    padding: 5px 12px;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: 0.2s;
+    font-size: 1rem;
+}
+.react-btn:hover { background: #e4e6eb; transform: scale(1.1); }
+.react-btn.active { background: #ffebee; color: #ff4d4d; }
+.count { font-weight: bold; margin-left: 5px; color: #65676b; }
+
+@media (max-width: 600px) {
+    .lightbox-content img, .lightbox-content video {
+        max-width: 100vw; /* Chiếm hết chiều ngang điện thoại */
+        max-height: 80vh;
+        border-radius: 0; /* Bỏ bo góc để tận dụng diện tích */
+    }
+}
+
+/* Style cho phần bình luận trong card */
+.comment-list {
+    max-height: 150px;
+    overflow-y: auto;
+    font-size: 0.9rem;
+    border-top: 1px solid #eee;
+    padding-top: 10px;
+    margin-top: 10px;
+    text-align: left;
+}
+
+.each-comment {
+    margin: 5px 0;
+    padding: 5px 8px;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+
+.comment-input-group {
+    display: flex;
+    gap: 5px;
+    margin-top: 10px;
+}
+
+.comment-input-group input {
+    flex: 1;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 20px;
+    outline: none;
+}
+
+.comment-input-group button {
+    background: #4CAF50;
+    color: white;
+    border: none;
+    padding: 5px 15px;
+    border-radius: 20px;
+    cursor: pointer;
+}
+
+/* Hiển thị gợi ý khi di chuột vào */
+.react-btn {
+    position: relative;
+    cursor: help; /* Đổi con trỏ chuột để biết là có thể xem danh sách */
+}
+
+/* Hiệu ứng khi đã thả cảm xúc (tùy chọn) */
+.react-btn:active {
+    transform: scale(1.2);
+}
+
+/* Container của nút cảm xúc */
+.react-btn {
+    position: relative; /* Để làm gốc cho tooltip */
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+/* Khung Tooltip chứa danh sách tên */
+.react-btn .tooltip-list {
+    visibility: hidden;
+    width: max-content;
+    max-width: 200px;
+    background-color: rgba(0, 0, 0, 0.85);
+    color: #fff;
+    text-align: left;
+    border-radius: 8px;
+    padding: 8px 12px;
+    position: absolute;
+    z-index: 100;
+    bottom: 125%; /* Hiện phía trên nút */
+    left: 50%;
+    transform: translateX(-50%);
+    opacity: 0;
+    transition: opacity 0.3s;
+    font-size: 12px;
+    line-height: 1.4;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+}
+
+/* Mũi tên nhỏ phía dưới tooltip */
+.react-btn .tooltip-list::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -5px;
+    border-width: 5px;
+    border-style: solid;
+    border-color: rgba(0, 0, 0, 0.85) transparent transparent transparent;
+}
+
+/* Hiển thị tooltip khi di chuột vào nút */
+.react-btn:hover .tooltip-list {
+    visibility: visible;
+    opacity: 1;
+}
+
+/* Hiệu ứng khi nhấn nút */
+.react-btn:active {
+    transform: scale(1.3);
+}
+
+.year-filter {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    margin: 20px 0;
+}
+
+.filter-btn {
+    padding: 10px 25px;
+    border: none;
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.3);
+    color: white;
+    cursor: pointer;
+    font-weight: bold;
+    transition: 0.3s;
+    backdrop-filter: blur(5px);
+}
+
+.filter-btn.active {
+    background: #ff7e5f;
+    box-shadow: 0 4px 15px rgba(255,126,95,0.4);
+}
+
+.filter-btn:hover {
+    background: rgba(255, 255, 255, 0.5);
+}
