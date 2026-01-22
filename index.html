@@ -1,11 +1,21 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
+    <meta name="description" content="Nơi lưu giữ những khoảnh khắc tuyệt vời nhất của tập thể lớp chúng mình.">
+
+    <meta property="og:title" content="Hành Trình Thanh Xuân - Kỷ Niệm Lớp">
+    <meta property="og:description" content="Nơi lưu giữ những khoảnh khắc tuyệt vời nhất của tập thể lớp chúng mình.">
+    <meta property="og:image" content="https://i.ibb.co/kV64zZND/365764096-6450632081690932-5422517136612939519-n.jpg">
+    <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Hành Trình Thanh Xuân - Kỷ Niệm Lớp">
+
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kỷ Niệm Lớp Chúng Mình</title>
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Quicksand:wght@400;600&display=swap" rel="stylesheet">
+    <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
 </head>
 <body>
     <audio id="bg-music" loop>
@@ -70,7 +80,14 @@
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
-    
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
+    <script>
+      AOS.init({
+        duration: 1000, 
+        once: true      
+      });
+    </script>
     <script src="script.js"></script>
 </body>
 </html>
