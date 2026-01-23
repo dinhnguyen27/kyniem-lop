@@ -355,43 +355,113 @@ async function sendTimeCapsule() {
 }
 
 
-function loadTimeCapsuleMessages() {
-    // Cách lấy ngày hôm nay cực chuẩn (YYYY-MM-DD)
-    const now = new Date();
-    const today = now.toLocaleDateString('sv-SE'); // sv-SE luôn cho ra định dạng YYYY-MM-DD
+// Hàm lọc thư ngay trên giao diện
+function filterCapsules() {
+    const searchText = document.getElementById('search-sender').value.toLowerCase();
+    const statusFilter = document.getElementById('filter-status').value;
+    const cards = document.querySelectorAll('.capsule-card');
 
-    db.collection("messages").orderBy("unlockDate", "asc").onSnapshot((snapshot) => {
-        const listDiv = document.getElementById('capsule-messages-list');
-        if (!listDiv) return;
+    cards.forEach(card => {
+        const sender = card.querySelector('strong').innerText.toLowerCase();
+        const isLocked = card.classList.contains('locked');
         
-        console.log("Dữ liệu về: ", snapshot.size);
-        listDiv.innerHTML = "";
+        let matchSearch = sender.includes(searchText);
+        let matchStatus = (statusFilter === 'all') || 
+                          (statusFilter === 'locked' && isLocked) || 
+                          (statusFilter === 'unlocked' && !isLocked);
 
-        snapshot.forEach((doc) => {
-            const data = doc.data();
-            // Nếu ngày hôm nay < ngày mở thư => isLocked = true
-            const isLocked = today < data.unlockDate;
-
-            listDiv.innerHTML += `
-                <div class="message-item ${isLocked ? 'is-locked' : 'is-unlocked'}">
-                    <div style="display:flex; justify-content:space-between; margin-bottom:10px; font-size:12px;">
-                        <strong>Từ: ${data.sender}</strong>
-                        <span>📅 ${data.unlockDate}</span>
-                    </div>
-                    <div>
-                        ${isLocked ? `
-                            <div class="lock-overlay">
-                                🔒 <p style="margin:5px 0 0 0;">Thư sẽ mở sau</p>
-                            </div>
-                        ` : `
-                            <p style="white-space: pre-wrap; margin:0;">${data.message}</p>
-                        `}
-                    </div>
-                </div>
-            `;
-        });
+        if (matchSearch && matchStatus) {
+            card.style.display = "flex";
+        } else {
+            card.style.display = "none";
+        }
     });
 }
 
-// Gọi hàm này ngay khi vào web
-loadTimeCapsuleMessages();
+let limitCount = 6; // Số lượng thư hiển thị ban đầu
+
+function loadTimeCapsuleMessages() {
+    const now = new Date();
+    const today = now.toLocaleDateString('sv-SE');
+
+    // Lắng nghe dữ liệu (Không dùng .limit ở đây để có thể sắp xếp Thư mở lên đầu toàn bộ danh sách)
+    db.collection("messages").orderBy("unlockDate", "asc").onSnapshot((snapshot) => {
+        const listDiv = document.getElementById('capsule-messages-list');
+        const loadMoreBtn = document.getElementById('btn-load-more');
+        if (!listDiv) return;
+        
+        let allMessages = [];
+        snapshot.forEach(doc => {
+            allMessages.push({ id: doc.id, ...doc.data() });
+        });
+
+        // 1. Sắp xếp: Thư đã mở (unlocked) lên đầu
+        allMessages.sort((a, b) => {
+            const isALocked = today < a.unlockDate;
+            const isBLocked = today < b.unlockDate;
+            if (isALocked === isBLocked) return 0;
+            return isALocked ? 1 : -1;
+        });
+
+        // 2. Chỉ lấy số lượng theo limitCount
+        const displayedMessages = allMessages.slice(0, limitCount);
+
+        // 3. Hiển thị/Ẩn nút "Tải thêm"
+        if (allMessages.length > limitCount) {
+            loadMoreBtn.style.display = "inline-block";
+        } else {
+            loadMoreBtn.style.display = "none";
+        }
+
+        listDiv.innerHTML = "";
+        displayedMessages.forEach((data) => {
+            const isLocked = today < data.unlockDate;
+            const card = document.createElement('div');
+            card.className = `capsule-card ${isLocked ? 'locked' : 'unlocked'}`;
+            
+            if (!isLocked) {
+                card.onclick = () => openLetter(data.sender, data.unlockDate, data.message);
+            }
+
+            card.innerHTML = `
+                <div class="lock-icon-center" style="font-size: 1.5rem;">🔒</div>
+                <div class="card-header" style="font-size: 0.75rem;">
+                    <strong>${data.sender}</strong>
+                    <span>📅 ${data.unlockDate}</span>
+                </div>
+                <div class="card-body">
+                    <p class="msg-text">${isLocked ? 'Nội dung đang được khóa...' : data.message}</p>
+                </div>
+            `;
+            listDiv.appendChild(card);
+        });
+
+        filterCapsules(); // Giữ bộ lọc tìm kiếm hoạt động
+    });
+}
+
+// Hàm khi nhấn nút Tải thêm
+function loadMoreCapsules() {
+    limitCount += 10; // Tăng thêm 10 thư mỗi lần nhấn
+    loadTimeCapsuleMessages(); // Tải lại danh sách
+}
+
+// Hàm mở Modal thư to
+function openLetter(sender, date, message) {
+    document.getElementById('modal-sender').innerText = "Từ: " + sender;
+    document.getElementById('modal-date').innerText = "Ngày hẹn mở: " + date;
+    const msgElement = document.getElementById('modal-message');
+    msgElement.innerText = message;
+    document.getElementById('letter-modal').style.display = 'flex';
+}
+
+// Hàm đóng Modal
+function closeLetter() {
+    document.getElementById('letter-modal').style.display = 'none';
+}
+
+// Đóng khi nhấn ra ngoài vùng thư
+window.onclick = function(event) {
+    const modal = document.getElementById('letter-modal');
+    if (event.target == modal) closeLetter();
+}
