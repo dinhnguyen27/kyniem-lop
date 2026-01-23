@@ -311,25 +311,31 @@ header h1 {
 
 .comment-input-group {
     display: flex;
-    gap: 5px;
+    gap: 8px; /* Khoảng cách giữa ô nhập và nút */
     margin-top: 10px;
+    width: 100%; /* Đảm bảo cả hàng không to hơn card */
+    padding: 0 5px; /* Tạo khoảng thở hai bên */
 }
 
 .comment-input-group input {
-    flex: 1;
-    padding: 8px;
+    flex: 1; /* Quan trọng: Chia sẻ không gian còn lại một cách công bằng */
+    min-width: 0; /* Ép input không được đẩy ra ngoài khi gõ chữ dài */
+    padding: 8px 15px;
     border: 1px solid #ddd;
     border-radius: 20px;
     outline: none;
+    font-size: 14px;
 }
 
 .comment-input-group button {
+    flex-shrink: 0; /* Ngăn nút Gửi bị bóp méo hoặc thu nhỏ */
     background: #4CAF50;
     color: white;
     border: none;
-    padding: 5px 15px;
+    padding: 8px 15px;
     border-radius: 20px;
     cursor: pointer;
+    font-weight: bold;
 }
 
 /* Hiển thị gợi ý khi di chuột vào */
@@ -432,3 +438,4 @@ header h1 {
     font-size: 1.2rem;
     margin-top: 50px;
 }
+
