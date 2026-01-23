@@ -492,56 +492,214 @@ header h1 {
     box-shadow: 0 5px 15px rgba(0,0,0,0.2);
 }
 
-/* Container danh sách thư */
-#capsule-messages-list {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 15px;
-    margin-top: 20px;
+/* Container tổng */
+.time-capsule-section {
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+    border-radius: 20px;
+    padding: 20px;
+    margin: 40px auto;
+    max-width: 900px;
+    text-align: center;
+    border: 1px solid rgba(255,255,255,0.3);
+    color: white;
 }
 
-/* Style chung cho mỗi bức thư */
-.message-item {
-    background: rgba(255, 255, 255, 0.15);
+.capsule-form textarea {
+    width: 100%;
+    height: 100px;
     border-radius: 15px;
     padding: 15px;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    backdrop-filter: blur(5px);
-    position: relative;
-    transition: 0.3s;
+    border: none;
+    margin-bottom: 10px;
+    background: rgba(255, 255, 255, 0.9);
 }
 
-/* Hiệu ứng cho thư BỊ KHÓA */
-.message-item.is-locked {
-    filter: grayscale(1) opacity(0.5); /* Chỉ làm mờ và xám thôi, đừng để opacity quá thấp */
-    background: rgba(255, 255, 255, 0.05);
+/* Grid chứa danh sách thư - Thay thế cho capsule-grid của bạn để khớp ID */
+#capsule-messages-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 15px;
+    margin-top: 20px;
+    max-height: 500px; /* Giới hạn chiều cao */
+    overflow-y: auto;  /* Hiện thanh cuộn khi thư tràn ra */
+    padding: 10px;
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.1);
 }
 
-.lock-overlay {
-    text-align: center;
-    padding: 15px;
-    border: 1px dashed rgba(255,255,255,0.3);
+/* Tùy chỉnh thanh cuộn cho đẹp */
+#capsule-messages-list::-webkit-scrollbar {
+    width: 6px;
+}
+#capsule-messages-list::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
     border-radius: 10px;
 }
 
-.lock-icon {
-    font-size: 24px;
+/* Xử lý nội dung thư dài */
+.msg-text {
+    display: -webkit-box;
+    -webkit-line-clamp: 4; /* Hiện tối đa 4 dòng */
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: all 0.3s;
+    cursor: pointer;
+}
+
+/* Khi bấm vào thư (thêm class expanded bằng JS), nó sẽ hiện đầy đủ */
+.msg-text.expanded {
+    -webkit-line-clamp: unset;
+    overflow: visible;
+}
+
+.read-more-btn {
+    font-size: 11px;
+    color: #00f2fe;
+    background: none;
+    border: none;
+    padding: 0;
+    margin-top: 5px;
+    cursor: pointer;
+    text-decoration: underline;
+}
+
+/* Thẻ thư (Capsule Card) */
+.capsule-card {
+    background: white;
+    padding: 20px;
+    border-radius: 15px;
+    position: relative;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+    color: #333;
+    text-align: left;
+    transition: transform 0.3s;
+    min-height: 120px;
+    display: flex;
+    flex-direction: column;
+    animation: fadeInUp 0.4s ease forwards;
+}
+
+/* Hiệu ứng KHI THƯ BỊ KHÓA */
+.capsule-card.locked {
+    filter: blur(5px) grayscale(1);
+    pointer-events: none;
+    user-select: none;
+    opacity: 0.7;
+}
+
+/* Hiệu ứng KHI THƯ ĐÃ MỞ */
+.capsule-card.unlocked {
+    border-top: 5px solid #00f2fe;
+    background: #fff;
+}
+
+/* Icon ổ khóa nằm chính giữa card khi bị khóa */
+.lock-icon-center {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 2.5rem;
+    z-index: 10;
+    filter: none !important; /* Không bị mờ theo card */
+    display: none;
+}
+
+.locked .lock-icon-center {
     display: block;
 }
 
-/* Hiệu ứng cho thư ĐÃ MỞ */
-.message-item.is-unlocked {
-    border-left: 5px solid #00f2fe;
-    background: rgba(255, 255, 255, 0.25);
-    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-}
-
-.message-header {
+.card-header {
     display: flex;
     justify-content: space-between;
-    font-size: 13px;
-    border-bottom: 1px solid rgba(255,255,255,0.1);
-    padding-bottom: 8px;
-    margin-bottom: 8px;
+    font-size: 0.85rem;
+    margin-bottom: 10px;
+    color: #666;
 }
 
+/* Modal nền mờ */
+.letter-modal {
+    display: none;
+    position: fixed;
+    z-index: 10000;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(8px);
+    align-items: center;
+    justify-content: center;
+}
+
+/* Nội dung bức thư */
+.letter-content {
+    position: relative;
+    width: 95%;             /* Chiếm 95% màn hình di động */
+    max-width: 600px;       /* Tối đa 600px trên máy tính */
+    max-height: 85vh;       /* Không cao quá 85% màn hình */
+    overflow-y: auto;       /* Tự cuộn nếu thư quá dài so với màn hình */
+    animation: openLetterAnim 0.5s ease;
+    scrollbar-width: thin;  /* Thanh cuộn nhỏ cho Firefox */
+}
+
+/* Tùy chỉnh thanh cuộn cho Modal thư */
+.letter-content::-webkit-scrollbar {
+    width: 4px;
+}
+.letter-content::-webkit-scrollbar-thumb {
+    background: #e0d1b1;
+    border-radius: 10px;
+}
+
+.letter-paper {
+    background: #fff9e6;
+    padding: 30px 40px; /* Giảm padding một chút để tăng diện tích chứa chữ */
+    border-radius: 4px;
+    min-height: 350px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+    background-image: repeating-linear-gradient(#fff9e6, #fff9e6 30px, #e0d1b1 31px);
+    line-height: 31px;
+    color: #444;
+    font-family: 'Quicksand', sans-serif;
+    
+    /* FIX LỖI TRÀN VIỀN TẠI ĐÂY */
+    word-wrap: break-word;       /* Ngắt từ khi quá dài */
+    overflow-wrap: break-word;   /* Ngắt từ cho các trình duyệt hiện đại */
+    word-break: break-word;      /* Đảm bảo không có chữ nào thoát ra ngoài */
+    max-width: 100%;             /* Không cho phép rộng hơn khung cha */
+    box-sizing: border-box;      /* Tính toán padding vào bên trong width */
+}
+
+.full-message {
+    white-space: pre-wrap;       /* Quan trọng: Giữ nguyên phím Enter xuống dòng */
+    word-break: break-word;      /* Ngắt dòng khi gặp lề phải */
+    text-align: justify;         /* Căn đều hai bên cho đẹp giống thư tay */
+    margin-top: 15px;
+    max-width: 100%;
+}
+
+.close-letter {
+    position: absolute;
+    top: -40px; right: 0;
+    color: white; font-size: 30px; cursor: pointer;
+}
+
+@keyframes openLetterAnim {
+    from { transform: scale(0) rotate(-10deg); opacity: 0; }
+    to { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+#btn-load-more:hover {
+    background: #01c6d1;
+    transform: scale(1.05);
+    transition: 0.2s;
+}
+
+#btn-load-more:active {
+    transform: scale(0.95);
+}
+
+@keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
