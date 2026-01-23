@@ -82,6 +82,14 @@ function loadGallery() {
                 </div>
             `;
             gallery.appendChild(card);
+            VanillaTilt.init(card, {
+                max: 15,        // Độ nghiêng tối đa
+                speed: 400,     // Tốc độ hồi phục
+                glare: true,    // Hiệu ứng bóng đổ ánh sáng
+                "max-glare": 0.5,   // Độ sáng của hiệu ứng phản chiếu
+                gyroscope: true,    // Hỗ trợ nghiêng bằng cảm biến trên điện thoại
+                scale: 1.05         // Phóng to nhẹ toàn bộ card khi di chuột vào
+            });
         });
     }); // <--- ĐÓNG onSnapshot
 } // <--- ĐÓNG loadGallery TẠI ĐÂY
