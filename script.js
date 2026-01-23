@@ -30,15 +30,6 @@ function filterByYear(year) {
     loadGallery(); // Tải lại ảnh theo năm đã chọn
 }
 
-// Kiểm tra trạng thái đăng nhập khi tải trang
-firebase.auth().onAuthStateChanged((user) => {
-    if (user) {
-        document.getElementById('login-box').style.display = 'none';
-    } else {
-        document.getElementById('login-box').style.display = 'block';
-    }
-});
-
 function loadGallery() {
     const gallery = document.getElementById('galleryGrid');
     if (!gallery) return;
