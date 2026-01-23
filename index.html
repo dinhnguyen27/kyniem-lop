@@ -66,9 +66,25 @@
 
                 <div id="time-capsule-display" style="margin-top: 30px; border-top: 1px dashed rgba(255,255,255,0.5); padding-top: 20px;">
                     <h3 style="color: #ffeb3b; font-family: 'Dancing Script'; font-size: 28px;">📬 Hộp Thư Thời Gian</h3>
-                    
+                    <p style="text-align: center; color: #156; font-family: 'Dancing Script'; margin-bottom: 30px;">
+                         Những lời nhắn gửi đến tương lai. Thư sẽ tự động mở khi đến ngày hẹn.
+                     </p>
+                    <div class="capsule-toolbar" style="display: flex; gap: 10px; margin-bottom: 15px;">
+                        <input type="text" id="search-sender" onkeyup="filterCapsules()" placeholder="Tìm tên bạn..." style="flex: 2; padding: 8px 15px; border-radius: 20px; border: none;">
+                        <select id="filter-status" onchange="filterCapsules()" style="flex: 1; border-radius: 20px; padding: 5px 10px; border: none; cursor: pointer;">
+                            <option value="all">Tất cả</option>
+                            <option value="unlocked">Đã mở ✅</option>
+                            <option value="locked">Đang khóa 🔒</option>
+                        </select>
+                    </div>
+
                     <div id="capsule-messages-list">
                         <p style='font-style:italic; color: #ddd; text-align: center;'>Đang tải những cánh thư...</p>
+                    </div>
+                    <div id="load-more-container" style="text-align: center; margin-top: 20px;">
+                        <button id="btn-load-more" onclick="loadMoreCapsules()" style="padding: 10px 25px; border-radius: 20px; border: none; background: #00f2fe; color: #333; font-weight: bold; cursor: pointer; display: none;">
+                            Xem thêm thư nào...
+                        </button>
                     </div>
                 </div>
             </div>
@@ -84,16 +100,7 @@
         <div class="gallery" id="galleryGrid">
             </div>
 
-            <div class="time-capsule-container" style="max-width: 1000px; margin: 50px auto; padding: 20px;">
-    <h2 style="text-align: center; color: white; font-family: 'Dancing Script'; font-size: 35px; text-shadow: 2px 2px 4px rgba(0,0,0,0.3);">
-        📬 Hộp Thư Thời Gian
-    </h2>
-    <p style="text-align: center; color: #eee; margin-bottom: 30px;">
-        Những lời nhắn gửi đến tương lai. Thư sẽ tự động mở khi đến ngày hẹn.
-    </p>
-
-    <div id="capsule-messages-list">
-        </div>
+            
 </div>
 
         <div id="leaf-container"></div>
@@ -115,6 +122,19 @@
             <button onclick="doRotate()">⟳</button>
         </div>
     </div>
+
+    <div id="letter-modal" class="letter-modal">
+        <div class="letter-content">
+            <span class="close-letter" onclick="closeLetter()">&times;</span>
+            <div class="letter-paper">
+                <h3 id="modal-sender">Từ: ...</h3>
+                <p id="modal-date" style="font-size: 0.8rem; color: #888;">Ngày mở: ...</p>
+                <hr>
+                <div id="modal-message" class="full-message"></div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
@@ -125,6 +145,7 @@
         duration: 1000, 
         once: true      
       });
+
     </script>
     <script src="script.js"></script>
 </body>
