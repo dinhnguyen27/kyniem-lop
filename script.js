@@ -202,6 +202,7 @@ function checkPassword() {
         loadGallery();
         startCountdown();
         createLeaves(); // Gọi hàm tạo hoa phượng
+        loadTimeCapsuleMessages();
         
         const music = document.getElementById('bg-music');
         if(music) music.play().catch(e => console.log("Nhạc bị chặn:", e));
@@ -333,3 +334,64 @@ async function handleReact(postId, type) {
     }
 }
 
+async function sendTimeCapsule() {
+    const sender = document.getElementById('capsule-sender').value.trim();
+    const msg = document.getElementById('capsule-message').value.trim();
+    const unlockDateValue = document.getElementById('unlock-date-input').value; // Định dạng YYYY-MM-DD
+    
+    if (!sender || !msg || !unlockDateValue) return alert("Vui lòng nhập đủ tên, lời nhắn và chọn ngày mở!");
+
+    try {
+        await db.collection("messages").add({
+            sender: sender,
+            message: msg,
+            unlockDate: unlockDateValue, // Lưu ngày người dùng chọn
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        
+        alert("💌 Thư đã được khóa lại cho đến ngày " + unlockDateValue);
+        // Reset form...
+    } catch (e) { alert("Lỗi: " + e.message); }
+}
+
+
+function loadTimeCapsuleMessages() {
+    // Cách lấy ngày hôm nay cực chuẩn (YYYY-MM-DD)
+    const now = new Date();
+    const today = now.toLocaleDateString('sv-SE'); // sv-SE luôn cho ra định dạng YYYY-MM-DD
+
+    db.collection("messages").orderBy("unlockDate", "asc").onSnapshot((snapshot) => {
+        const listDiv = document.getElementById('capsule-messages-list');
+        if (!listDiv) return;
+        
+        console.log("Dữ liệu về: ", snapshot.size);
+        listDiv.innerHTML = "";
+
+        snapshot.forEach((doc) => {
+            const data = doc.data();
+            // Nếu ngày hôm nay < ngày mở thư => isLocked = true
+            const isLocked = today < data.unlockDate;
+
+            listDiv.innerHTML += `
+                <div class="message-item ${isLocked ? 'is-locked' : 'is-unlocked'}">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:10px; font-size:12px;">
+                        <strong>Từ: ${data.sender}</strong>
+                        <span>📅 ${data.unlockDate}</span>
+                    </div>
+                    <div>
+                        ${isLocked ? `
+                            <div class="lock-overlay">
+                                🔒 <p style="margin:5px 0 0 0;">Thư sẽ mở sau</p>
+                            </div>
+                        ` : `
+                            <p style="white-space: pre-wrap; margin:0;">${data.message}</p>
+                        `}
+                    </div>
+                </div>
+            `;
+        });
+    });
+}
+
+// Gọi hàm này ngay khi vào web
+loadTimeCapsuleMessages();
