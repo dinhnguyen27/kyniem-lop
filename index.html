@@ -48,6 +48,32 @@
         <div style="text-align: center; margin: 20px;">
             <button class="btn-surprise" onclick="showSurprise()">🎁 Xuyên không (Ngẫu nhiên)</button>
         </div>
+
+        <section class="time-capsule-section" data-aos="zoom-in">
+            <div class="capsule-box">
+                <h2>✉️ Gửi lời nhắn đến tương lai</h2>
+                
+                <div class="capsule-form" id="capsule-input-area">
+                    <p>Những dòng tâm sự này sẽ được "khóa" lại và chỉ mở ra vào ngày đặc biệt.</p>
+                    <input type="text" id="capsule-sender" placeholder="Tên của bạn...">
+                    
+                    <label style="display:block; margin-top:10px; font-size:14px; color: #eee;">Ngày mở thư:</label>
+                    <input type="date" id="unlock-date-input">
+                    
+                    <textarea id="capsule-message" placeholder="Bạn muốn nói gì với lớp mình sau này?"></textarea>
+                    <button onclick="sendTimeCapsule()">Gửi vào hộp thư bí mật</button>
+                </div>
+
+                <div id="time-capsule-display" style="margin-top: 30px; border-top: 1px dashed rgba(255,255,255,0.5); padding-top: 20px;">
+                    <h3 style="color: #ffeb3b; font-family: 'Dancing Script'; font-size: 28px;">📬 Hộp Thư Thời Gian</h3>
+                    
+                    <div id="capsule-messages-list">
+                        <p style='font-style:italic; color: #ddd; text-align: center;'>Đang tải những cánh thư...</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <div class="year-filter">
             <button class="filter-btn active" onclick="filterByYear('all')">Tất cả</button>
             <button class="filter-btn" onclick="filterByYear('2024')">2024</button>
@@ -57,6 +83,18 @@
 
         <div class="gallery" id="galleryGrid">
             </div>
+
+            <div class="time-capsule-container" style="max-width: 1000px; margin: 50px auto; padding: 20px;">
+    <h2 style="text-align: center; color: white; font-family: 'Dancing Script'; font-size: 35px; text-shadow: 2px 2px 4px rgba(0,0,0,0.3);">
+        📬 Hộp Thư Thời Gian
+    </h2>
+    <p style="text-align: center; color: #eee; margin-bottom: 30px;">
+        Những lời nhắn gửi đến tương lai. Thư sẽ tự động mở khi đến ngày hẹn.
+    </p>
+
+    <div id="capsule-messages-list">
+        </div>
+</div>
 
         <div id="leaf-container"></div>
         <div style="text-align: center; margin-bottom: 20px;">
