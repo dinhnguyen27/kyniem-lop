@@ -178,6 +178,20 @@ header h1 {
     z-index: 2;
 }
 
+/* Thêm vào style.css */
+.video-preview-container video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover; /* Cực kỳ quan trọng để ảnh poster không bị méo */
+    background-color: #000; /* Nền đen dự phòng */
+    display: block;
+}
+
+/* Hiệu ứng mờ nhẹ cho poster khi chưa load xong */
+video[poster] {
+    transition: opacity 0.5s;
+}
+
 /* Hiệu ứng hover cho cả card */
 .card:hover .media-wrap img,
 .card:hover .media-wrap video {
@@ -772,3 +786,4 @@ header h1 {
     box-shadow: 0 15px 30px rgba(0,0,0,0.2);
     transition: all 0.3s ease;
 }
+
