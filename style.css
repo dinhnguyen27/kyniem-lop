@@ -158,11 +158,14 @@ header h1 {
     transition: transform 0.3s ease;
 }
 
-/* Riêng cho Video để đảm bảo không bị trắng trên điện thoại */
-.media-wrap video {
-    min-height: 200px; /* Đảm bảo luôn có chiều cao tối thiểu */
+/* Tìm và thay thế các class liên quan đến video */
+.video-preview-container {
+    position: relative;
+    width: 100%;
+    height: 250px; /* Cố định chiều cao để đồng bộ gallery */
     background-color: #000;
-    object-fit: contain; /* Hoặc 'cover' tùy bạn muốn cắt ảnh hay hiện đủ khung hình */
+    border-radius: 12px;
+    overflow: hidden;
 }
 
 /* Nút Play Overlay */
@@ -182,8 +185,7 @@ header h1 {
 .video-preview-container video {
     width: 100%;
     height: 100%;
-    object-fit: cover; /* Cực kỳ quan trọng để ảnh poster không bị méo */
-    background-color: #000; /* Nền đen dự phòng */
+    object-fit: cover; /* Quan trọng: Poster sẽ lấp đầy khung hình */
     display: block;
 }
 
@@ -786,4 +788,3 @@ video[poster] {
     box-shadow: 0 15px 30px rgba(0,0,0,0.2);
     transition: all 0.3s ease;
 }
-
