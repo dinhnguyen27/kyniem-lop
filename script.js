@@ -35,8 +35,6 @@ function loadGallery() {
     if (!gallery) return;
 
     let query = db.collection("posts").orderBy("createdAt", "desc");
-    
-    // Nếu không phải "Tất cả", thêm điều kiện lọc theo năm
     if (currentYearFilter !== 'all') {
         query = query.where("year", "==", currentYearFilter);
     }
@@ -45,36 +43,43 @@ function loadGallery() {
         gallery.innerHTML = ""; 
         snapshot.forEach((doc) => {
             const data = doc.data();
+            const fileUrl = data.url || "";
             
-            // Đảm bảo các biến dữ liệu luôn có mảng mặc định để không bị lỗi undefined
-            const comments = data.comments || [];
-            const heartUsers = data.heartUsers || [];
-            const hahaUsers = data.hahaUsers || [];
-            
-            const commentHtml = comments.map(c => `<p class="each-comment"><b>${c.user}:</b> ${c.text}</p>`).join('');
-            const heartListHtml = heartUsers.length > 0 ? heartUsers.join("<br>") : "Chưa có ai thả tim";
-            const hahaListHtml = hahaUsers.length > 0 ? hahaUsers.join("<br>") : "Chưa có ai haha";
+            // Kiểm tra xem là video hay ảnh
+            const isVideo = fileUrl.toLowerCase().includes('.mp4') || 
+                            fileUrl.toLowerCase().includes('video/upload') || 
+                            fileUrl.toLowerCase().includes('cloudinary');
+
+            let mediaHtml = "";
+            if (isVideo) {
+                // Với video: không để controls ở đây để tránh bị đè nút click
+                mediaHtml = `
+                    <div class="video-preview-container" onclick="openLightbox('${fileUrl}', true)">
+                        <video src="${fileUrl}" preload="metadata"></video>
+                        <div class="play-button-overlay">▶</div>
+                    </div>`;
+            } else {
+                // Với ảnh: truyền link trực tiếp vào hàm openLightbox
+                mediaHtml = `<img src="${fileUrl}" onclick="openLightbox('${fileUrl}', false)" loading="lazy" alt="Kỷ niệm">`;
+            }
 
             const card = document.createElement('div');
             card.className = 'card';
             card.setAttribute('data-aos', 'fade-up');
             card.innerHTML = `
-                <div class="media-wrap" onclick="openLightbox(this)">
-                    <img src="${data.url}"loading="lazy" alt="Kỷ niệm lớp">
+                <div class="media-wrap">
+                    ${mediaHtml}
                 </div>
                 <div class="comment-area">
                     <div class="reactions">
                         <button class="react-btn" onclick="handleReact('${doc.id}', 'hearts')">
-                            ❤️ <span class="count">${heartUsers.length}</span>
-                            <span class="tooltip-list">${heartListHtml}</span>
+                            ❤️ <span class="count">${(data.heartUsers || []).length}</span>
                         </button>
                         <button class="react-btn" onclick="handleReact('${doc.id}', 'hahas')">
-                            😆 <span class="count">${hahaUsers.length}</span>
-                            <span class="tooltip-list">${hahaListHtml}</span>
+                            😆 <span class="count">${(data.hahaUsers || []).length}</span>
                         </button>
                     </div>
                     <p><strong>Kỷ niệm:</strong> ${data.caption || "Không có chú thích"}</p>
-                    <div class="comment-list" id="comments-${doc.id}">${commentHtml}</div>
                     <div class="comment-input-group">
                         <input type="text" placeholder="Viết bình luận..." id="input-${doc.id}" onkeypress="checkCommentEnter(event, '${doc.id}')">
                         <button onclick="addComment('${doc.id}')">Gửi</button>
@@ -82,18 +87,19 @@ function loadGallery() {
                 </div>
             `;
             gallery.appendChild(card);
+
+            // Khởi tạo hiệu ứng nghiêng 3D
             VanillaTilt.init(card, {
-                max: 15,        // Độ nghiêng tối đa
-                speed: 400,     // Tốc độ hồi phục
-                glare: true,    // Hiệu ứng bóng đổ ánh sáng
-                "max-glare": 0.5,   // Độ sáng của hiệu ứng phản chiếu
-                gyroscope: true,    // Hỗ trợ nghiêng bằng cảm biến trên điện thoại
-                scale: 1.05         // Phóng to nhẹ toàn bộ card khi di chuột vào
+                max: 15,
+                speed: 400,
+                glare: true,
+                "max-glare": 0.5,
+                gyroscope: true,
+                scale: 1.05
             });
         });
-    }); // <--- ĐÓNG onSnapshot
-} // <--- ĐÓNG loadGallery TẠI ĐÂY
-// Hàm để lấy hoặc hỏi tên người dùng
+    });
+}
 function getUserName() {
     let userName = localStorage.getItem("class_user_name");
     if (!userName) {
@@ -237,18 +243,18 @@ function createLeaves() {
 }
 
 // 6. Các hàm bổ trợ (Lightbox, Hiệu ứng rơi...)
-function openLightbox(container) {
-    const source = container.querySelector('img, video');
-    const content = document.getElementById('lightboxContent');
+function openLightbox(url, isVideo) {
     const lightbox = document.getElementById('lightbox');
+    const content = document.getElementById('lightboxContent');
     
-    let el = document.createElement(source.tagName);
-    el.src = source.src;
-    if(source.tagName === 'VIDEO') { el.controls = true; el.autoplay = true; }
+    content.innerHTML = ""; // Xóa nội dung cũ
     
-    el.id = "activeMedia";
-    content.innerHTML = '';
-    content.appendChild(el);
+    if (isVideo) {
+        content.innerHTML = `<video src="${url}" controls autoplay style="max-width:100%; max-height:80vh;"></video>`;
+    } else {
+        content.innerHTML = `<img src="${url}" style="max-width:100%; max-height:80vh;">`;
+    }
+    
     lightbox.style.display = 'flex';
 }
 
@@ -378,13 +384,12 @@ function filterCapsules() {
     });
 }
 
-let limitCount = 6; // Số lượng thư hiển thị ban đầu
+// Biến giới hạn 6 bức thư
+let limitCount = 6; 
 
 function loadTimeCapsuleMessages() {
-    const now = new Date();
-    const today = now.toLocaleDateString('sv-SE');
+    const today = new Date().toLocaleDateString('sv-SE');
 
-    // Lắng nghe dữ liệu (Không dùng .limit ở đây để có thể sắp xếp Thư mở lên đầu toàn bộ danh sách)
     db.collection("messages").orderBy("unlockDate", "asc").onSnapshot((snapshot) => {
         const listDiv = document.getElementById('capsule-messages-list');
         const loadMoreBtn = document.getElementById('btn-load-more');
@@ -395,7 +400,7 @@ function loadTimeCapsuleMessages() {
             allMessages.push({ id: doc.id, ...doc.data() });
         });
 
-        // 1. Sắp xếp: Thư đã mở (unlocked) lên đầu
+        // Sắp xếp thư mở lên đầu
         allMessages.sort((a, b) => {
             const isALocked = today < a.unlockDate;
             const isBLocked = today < b.unlockDate;
@@ -403,34 +408,40 @@ function loadTimeCapsuleMessages() {
             return isALocked ? 1 : -1;
         });
 
-        // 2. Chỉ lấy số lượng theo limitCount
         const displayedMessages = allMessages.slice(0, limitCount);
 
-        // 3. Hiển thị/Ẩn nút "Tải thêm"
-        if (allMessages.length > limitCount) {
-            loadMoreBtn.style.display = "inline-block";
-        } else {
-            loadMoreBtn.style.display = "none";
+        // Hiển thị nút tải thêm
+        if (loadMoreBtn) {
+            loadMoreBtn.style.display = (allMessages.length > limitCount) ? "inline-block" : "none";
         }
 
         listDiv.innerHTML = "";
-        displayedMessages.forEach((data) => {
+        displayedMessages.forEach((data, index) => {
             const isLocked = today < data.unlockDate;
             const card = document.createElement('div');
-            card.className = `capsule-card ${isLocked ? 'locked' : 'unlocked'}`;
             
+            // Chỉ áp dụng hiệu ứng fly-in cho những card mới xuất hiện ở trang hiện tại
+            // Ví dụ: khi ấn lần đầu hiện 6, khi ấn "Xem thêm" lần 2 thì card từ 7-12 sẽ bay
+            const isNewLoad = index >= (limitCount - 6);
+            card.className = `capsule-card ${isLocked ? 'locked' : 'unlocked'} ${isNewLoad ? 'fly-in' : ''}`;
+            
+            // Tạo độ trễ (delay) tăng dần: 0s, 0.1s, 0.2s... để bay từ trái sang lần lượt
+            if (isNewLoad) {
+                card.style.animationDelay = `${(index % 6) * 0.15}s`;
+            }
+
             if (!isLocked) {
                 card.onclick = () => openLetter(data.sender, data.unlockDate, data.message);
             }
 
             card.innerHTML = `
-                <div class="lock-icon-center" style="font-size: 1.5rem;">🔒</div>
-                <div class="card-header" style="font-size: 0.75rem;">
+                <div class="lock-icon-center">🔒</div>
+                <div class="card-header">
                     <strong>${data.sender}</strong>
                     <span>📅 ${data.unlockDate}</span>
                 </div>
                 <div class="card-body">
-                    <p class="msg-text">${isLocked ? 'Nội dung đang được khóa...' : data.message}</p>
+                    <p class="msg-text">${isLocked ? 'Thư đang bị khóa bí mật...' : data.message}</p>
                 </div>
             `;
             listDiv.appendChild(card);
