@@ -18,6 +18,90 @@ const db = firebase.firestore();
 // 2. Hàm Tải Ảnh từ Firebase (Quan trọng nhất)
 let currentYearFilter = 'all';
 
+// 1. Danh sách nhạc
+const playlist = [
+    { name: "Thanh Xuân Của Chúng Ta", url: "https://www.dropbox.com/scl/fi/x9ecysqp7f524j5viynqp/nhac_nen.mp3?rlkey=bm731mxowol5lb03z94dzi1bt&st=bbswnyv7&raw=1" },
+    { name: "Hẹn Ước Mùa Hè", url: "link_2.mp3" },
+    { name: "Kỷ Niệm Mái Trường", url: "link_3.mp3" }
+];
+let currentSongIndex = 0;
+const audio = document.getElementById('bg-music');
+
+// 2. Hàm mở Menu nhạc
+function toggleMusicMenu() {
+    const btn = document.getElementById('main-music-btn');
+    const options = document.getElementById('music-options');
+    const panel = document.getElementById('playlist-panel'); // Lấy thêm bảng danh sách
+
+    btn.classList.toggle('active');
+    options.classList.toggle('show');
+
+    // NẾU menu chính đóng lại (không còn class active)
+    if (!btn.classList.contains('active')) {
+        // Thì ẩn luôn bảng danh sách nhạc nếu nó đang mở
+        if (panel) panel.style.display = 'none';
+    }
+}
+
+// Hàm hiển thị thông báo bài hát
+function showMusicToast(songName) {
+    const toast = document.getElementById('music-toast');
+    toast.innerHTML = `🎵 Đang phát: ${songName}`;
+    toast.classList.add('show');
+
+    // Tự động ẩn sau 3 giây
+    setTimeout(() => {
+        toast.classList.remove('show');
+    }, 3000);
+}
+
+// 3. Hàm ẩn hiện danh sách bài hát
+function togglePlaylistMenu() {
+    const panel = document.getElementById('playlist-panel');
+    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    if(panel.style.display === 'block') renderPlaylist();
+}
+
+function renderPlaylist() {
+    const listUI = document.getElementById('song-list');
+    listUI.innerHTML = playlist.map((song, i) => 
+        `<li onclick="playSong(${i})">${i === currentSongIndex ? '▶ ' : ''}${song.name}</li>`
+    ).join('');
+}
+
+function playSong(index) {
+    const audio = document.getElementById('bg-music');
+    const musicIcon = document.getElementById('music-icon');
+    
+    currentSongIndex = index;
+    audio.src = playlist[index].url;
+    audio.play();
+    
+    // Gọi thông báo tên bài hát ở đây
+    showMusicToast(playlist[index].name);
+
+    if(musicIcon) musicIcon.classList.add('rotating');
+    renderPlaylist();
+}
+
+function toggleMusic() {
+    const icon = document.getElementById('play-pause-icon');
+    if (audio.paused) {
+        audio.play();
+        icon.className = "fas fa-pause"; // Đổi thành icon Tạm dừng
+        document.getElementById('music-icon').classList.add('rotating');
+    } else {
+        audio.pause();
+        icon.className = "fas fa-play"; // Đổi thành icon Phát
+        document.getElementById('music-icon').classList.remove('rotating');
+    }
+}
+
+function changeMusic() {
+    currentSongIndex = (currentSongIndex + 1) % playlist.length;
+    playSong(currentSongIndex);
+}
+
 function filterByYear(year) {
     currentYearFilter = year;
     // Cập nhật giao diện nút bấm
@@ -223,6 +307,11 @@ function checkPassword() {
         // 1. Ẩn màn hình khóa và hiện nội dung chính
         document.getElementById('password-screen').style.display = 'none';
         document.getElementById('main-content').style.display = 'block';
+        
+        // HIỆN TRÌNH NHẠC VÀ PHÁT TỰ ĐỘNG
+        const container = document.getElementById('music-container');
+        container.style.display = 'block';
+        playSong(0);
         
         // 2. Bắn pháo giấy chúc mừng
         confetti({
@@ -504,3 +593,17 @@ window.onclick = function(event) {
     const modal = document.getElementById('letter-modal');
     if (event.target == modal) closeLetter();
 }
+
+window.addEventListener('click', function(e) {
+    const container = document.getElementById('music-container');
+    const btn = document.getElementById('main-music-btn');
+    const options = document.getElementById('music-options');
+    const panel = document.getElementById('playlist-panel');
+
+    // Nếu click ra ngoài vùng music-container
+    if (container && !container.contains(e.target)) {
+        btn.classList.remove('active');
+        options.classList.remove('show');
+        if (panel) panel.style.display = 'none';
+    }
+});
