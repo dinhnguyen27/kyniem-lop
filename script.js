@@ -73,6 +73,17 @@ function loadGallery() {
                 mediaHtml = `<img src="${fileUrl}" onclick="openLightbox('${fileUrl}', false)" loading="lazy" alt="Kỷ niệm">`;
             }
 
+            const heartUsers = data.heartUsers || [];
+            const hahaUsers = data.hahaUsers || [];
+            const comments = data.comments || [];
+            const commentHtml = comments.map(c => `
+                <p class="each-comment"><b>${c.user}:</b> ${c.text}</p>
+            `).join('');
+
+            // Tạo danh sách tên để hiện khi rê chuột vào (Tooltip)
+            const heartListHtml = heartUsers.length > 0 ? heartUsers.join("<br>") : "Chưa có ai thả tim";
+            const hahaListHtml = hahaUsers.length > 0 ? hahaUsers.join("<br>") : "Chưa có ai haha";
+
             const card = document.createElement('div');
             card.className = 'card';
             card.setAttribute('data-aos', 'fade-up');
@@ -83,13 +94,20 @@ function loadGallery() {
                 <div class="comment-area">
                     <div class="reactions">
                         <button class="react-btn" onclick="handleReact('${doc.id}', 'hearts')">
-                            ❤️ <span class="count">${(data.heartUsers || []).length}</span>
+                            ❤️ <span class="count">${heartUsers.length}</span>
+                            <span class="tooltip-list">${heartListHtml}</span>
                         </button>
                         <button class="react-btn" onclick="handleReact('${doc.id}', 'hahas')">
-                            😆 <span class="count">${(data.hahaUsers || []).length}</span>
+                            😆 <span class="count">${hahaUsers.length}</span>
+                            <span class="tooltip-list">${hahaListHtml}</span>
                         </button>
                     </div>
                     <p><strong>Kỷ niệm:</strong> ${data.caption || "Không có chú thích"}</p>
+
+                    <div class="comment-list" id="comments-${doc.id}">
+                        ${commentHtml}
+                    </div>
+
                     <div class="comment-input-group">
                         <input type="text" placeholder="Viết bình luận..." id="input-${doc.id}" onkeypress="checkCommentEnter(event, '${doc.id}')">
                         <button onclick="addComment('${doc.id}')">Gửi</button>
