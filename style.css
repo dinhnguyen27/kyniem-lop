@@ -137,42 +137,62 @@ header h1 {
     cursor: zoom-in;
 }
 
-.media-wrap img, .media-wrap video {
+/* Container bao quanh ảnh/video */
+.media-wrap {
+    position: relative; /* Cần thiết để căn giữa nút Play */
+    height: auto; 
+    cursor: zoom-in;
+    background: #000; /* Tạo nền đen để tránh hiện tượng trắng xóa trên điện thoại */
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.media-wrap img, 
+.media-wrap video {
     width: 100%;
-    height: auto; /* Ảnh giữ nguyên tỉ lệ gốc */
+    height: auto;
     display: block;
-    /* THÊM DÒNG NÀY: Đẩy ảnh nổi lên 30px so với mặt phẳng thẻ */
+    /* Hiệu ứng nổi khối 3D bạn đang dùng */
     transform: translateZ(30px) scale(1);
     filter: drop-shadow(0 15px 15px rgba(0,0,0,0.3));
+    transition: transform 0.3s ease;
 }
 
-/* Điều chỉnh số cột trên điện thoại và máy tính bảng */
-@media (max-width: 1000px) {
-    .gallery { column-count: 3; }
-}
-@media (max-width: 700px) {
-    .gallery { column-count: 2; }
-}
-@media (max-width: 400px) {
-    .gallery { column-count: 1; }
+/* Riêng cho Video để đảm bảo không bị trắng trên điện thoại */
+.media-wrap video {
+    min-height: 200px; /* Đảm bảo luôn có chiều cao tối thiểu */
+    background-color: #000;
+    object-fit: contain; /* Hoặc 'cover' tùy bạn muốn cắt ảnh hay hiện đủ khung hình */
 }
 
-
-.gallery-video {
-    width: 100%;
-    max-height: 400px;
-    background: #000;
-    object-fit: cover; /* Giúp video lấp đầy khung hình đẹp hơn */
-}
+/* Nút Play Overlay */
 .play-button-overlay {
     position: absolute;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    font-size: 40px;
-    color: white;
-    text-shadow: 0 0 10px rgba(0,0,0,0.5);
-    pointer-events: none; /* Để click xuyên qua vào thẻ video */
+    font-size: 50px; /* To hơn chút để dễ thấy */
+    color: rgba(255, 255, 255, 0.8);
+    text-shadow: 0 0 15px rgba(0,0,0,0.5);
+    pointer-events: none; 
+    z-index: 2;
+}
+
+/* Hiệu ứng hover cho cả card */
+.card:hover .media-wrap img,
+.card:hover .media-wrap video {
+    transform: translateZ(50px) scale(1.05); /* Nổi cao hơn khi di chuột */
+}
+
+/* Điều chỉnh số cột linh hoạt */
+@media (max-width: 1000px) {
+    .gallery { column-count: 3; column-gap: 15px; }
+}
+@media (max-width: 700px) {
+    .gallery { column-count: 2; column-gap: 10px; }
+}
+@media (max-width: 400px) {
+    .gallery { column-count: 1; }
 }
 
 /* Lightbox */
