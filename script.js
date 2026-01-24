@@ -51,13 +51,18 @@ function loadGallery() {
                             fileUrl.toLowerCase().includes('cloudinary');
 
             let mediaHtml = "";
-            if (isVideo) {
-                // Với video: không để controls ở đây để tránh bị đè nút click
-                mediaHtml = `
-                    <div class="video-preview-container" onclick="openLightbox('${fileUrl}', true)">
-                        <video src="${fileUrl}" preload="metadata"></video>
-                        <div class="play-button-overlay">▶</div>
-                    </div>`;
+           if (isVideo) {
+            mediaHtml = `
+                <div class="video-preview-container" onclick="openLightbox('${fileUrl}', true)">
+                    <video 
+                        src="${fileUrl}" 
+                        preload="metadata" 
+                        playsinline
+                        muted
+                        style="width:100%; height:250px; object-fit: cover; border-radius: 8px;">
+                    </video>
+                    <div class="play-button-overlay">▶</div>
+                </div>`;
             } else {
                 // Với ảnh: truyền link trực tiếp vào hàm openLightbox
                 mediaHtml = `<img src="${fileUrl}" onclick="openLightbox('${fileUrl}', false)" loading="lazy" alt="Kỷ niệm">`;
