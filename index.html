@@ -13,14 +13,39 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kỷ Niệm Lớp Chúng Mình</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Quicksand:wght@400;600&display=swap" rel="stylesheet">
     <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
 </head>
 <body>
-    <audio id="bg-music" loop>
-        <source src="data/nhac_nen.mp3" type="audio/mpeg">
-    </audio>
+    <div id="music-container">
+        <div id="music-toast"></div>
+    <button id="main-music-btn" onclick="toggleMusicMenu()">
+        <i id="music-icon" class="fas fa-compact-disc"></i>
+    </button>
+
+    <div id="music-options">
+        <button class="sub-btn" onclick="toggleMusic()">
+            <i id="play-pause-icon" class="fas fa-pause"></i>
+        </button>
+        <button class="sub-btn" onclick="changeMusic()">
+            <i class="fas fa-step-forward"></i>
+        </button>
+        <button class="sub-btn" onclick="togglePlaylistMenu()">
+            <i class="fas fa-list"></i>
+        </button>
+    </div>
+
+    <div id="playlist-panel">
+        <h4>Danh sách nhạc</h4>
+        <ul id="song-list"></ul>
+    </div>
+
+    <audio id="bg-music" loop></audio>
+</div>
+    
+    </div>
 
     <div id="password-screen">
         <div class="lock-box">
