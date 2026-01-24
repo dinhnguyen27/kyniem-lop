@@ -51,16 +51,19 @@ function loadGallery() {
                             fileUrl.toLowerCase().includes('cloudinary');
 
             let mediaHtml = "";
-           if (isVideo) {
+            if (isVideo) {
             // Tạo link ảnh đại diện tự động từ Cloudinary
-            const posterUrl = fileUrl.split('?')[0].replace(/\.[^/.]+$/, "") + ".jpg";
+            let posterUrl = fileUrl.replace("/upload/", "/upload/so_0/").replace(/\.[^/.]+$/, ".jpg");
+
             mediaHtml = `
                 <div class="video-preview-container" onclick="openLightbox('${fileUrl}', true)">
                     <video 
                         src="${fileUrl}" 
+                        poster="${posterUrl}"
                         preload="metadata" 
                         playsinline
                         muted
+                        loop>
                         style="width:100%; height:250px; object-fit: cover; border-radius: 8px;">
                     </video>
                     <div class="play-button-overlay">▶</div>
@@ -483,4 +486,3 @@ window.onclick = function(event) {
     const modal = document.getElementById('letter-modal');
     if (event.target == modal) closeLetter();
 }
-
