@@ -52,6 +52,8 @@ function loadGallery() {
 
             let mediaHtml = "";
            if (isVideo) {
+               // Tạo link ảnh đại diện tự động từ Cloudinary
+                const posterUrl = fileUrl.replace(/\.[^/.]+$/, ".jpg");
             mediaHtml = `
                 <div class="video-preview-container" onclick="openLightbox('${fileUrl}', true)">
                     <video 
@@ -481,3 +483,4 @@ window.onclick = function(event) {
     const modal = document.getElementById('letter-modal');
     if (event.target == modal) closeLetter();
 }
+
