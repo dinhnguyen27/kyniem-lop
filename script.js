@@ -23,7 +23,7 @@ const playlist = [
     { name: "Nụ cười 18 20", url: "https://www.dropbox.com/scl/fi/x9ecysqp7f524j5viynqp/nhac_nen.mp3?rlkey=bm731mxowol5lb03z94dzi1bt&st=bbswnyv7&raw=1" },
     { name: "Mình cùng nhau đóng băng", url: "https://www.dropbox.com/scl/fi/cjnpiialmlipbm6thf6se/M-nh-C-ng-Nhau-ng-B-ng-Th-y-Chi-FPT-Polytechnic-TH-Y-CHI-OFFICIAL-youtube.mp3?rlkey=xumdtk05j58w5kmrlj59fnhmn&st=8a7bju1w&raw=1" },
     { name: "Tháng 5 không trở lại", url: "https://www.dropbox.com/scl/fi/5j58xxq4mesripdpc8nv7/Th-ng-5-kh-ng-tr-l-i..-Tom-HiddleTom-youtube.mp3?rlkey=4sjno87kko61ogi8fwseak7t7&st=04ih5dk7&raw=1" },
-    { name: "Người gieo mầm xanh", url: "https://www.dropbox.com/scl/fi/o0mlxit7ff4nh4u1msprh/NG-I-GIEO-M-M-XANH-H-A-KIM-TUY-N-x-HO-NG-D-NG-OFFICIAL-MV-H-a-Kim-Tuy-n-youtube.mp3?rlkey=3ouz5ydq09ad2p87lqn851kqq&st=vsraqvur&raw=1" },
+    { name: "Người gieo mầm xanh", url: "https://www.dropbox.com/scl/fi/o0mlxit7ff4nh4u1msprh/NG-I-GIEO-M-M-XANH-H-A-KIM-TUY-N-x-HO-NG-D-NG-OFFICIAL-MV-H-a-Kim-Tuy-n-youtube.mp3?rlkey=3ouz5ydq09ad2p87lqn851kqq&st=vsraqvur&raw=1" }
 ];
 let currentSongIndex = 0;
 const audio = document.getElementById('bg-music');
@@ -273,7 +273,7 @@ function handleReact(postId, type) {
 
 // 4. Đồng hồ đếm ngược (Sửa lỗi không chạy)
 function startCountdown() {
-    const examDate = new Date("June 12, 2026 00:00:00").getTime();
+    const examDate = new Date("June 15, 2026 00:00:00").getTime();
 
     const timer = setInterval(function() {
         const now = new Date().getTime();
@@ -502,15 +502,17 @@ function filterCapsules() {
     });
 }
 
-// Biến giới hạn 6 bức thư
+// Khai báo biến giới hạn cho phần Grid bên dưới
 let limitCount = 6; 
 
 function loadTimeCapsuleMessages() {
     const today = new Date().toLocaleDateString('sv-SE');
 
     db.collection("messages").orderBy("unlockDate", "asc").onSnapshot((snapshot) => {
+        const carouselDiv = document.getElementById('capsule-carousel-3d'); // Đảm bảo ID này có trong HTML
         const listDiv = document.getElementById('capsule-messages-list');
         const loadMoreBtn = document.getElementById('btn-load-more');
+        
         if (!listDiv) return;
         
         let allMessages = [];
@@ -518,7 +520,7 @@ function loadTimeCapsuleMessages() {
             allMessages.push({ id: doc.id, ...doc.data() });
         });
 
-        // Sắp xếp thư mở lên đầu
+        // Sắp xếp: Thư đã mở (unlocked) lên đầu
         allMessages.sort((a, b) => {
             const isALocked = today < a.unlockDate;
             const isBLocked = today < b.unlockDate;
@@ -526,47 +528,71 @@ function loadTimeCapsuleMessages() {
             return isALocked ? 1 : -1;
         });
 
-        const displayedMessages = allMessages.slice(0, limitCount);
+        // --- PHẦN 1: RENDER VÒNG QUAY (TOP 6) ---
+        if (carouselDiv) {
+            carouselDiv.innerHTML = "";
+            const top6 = allMessages.slice(0, 6);
+            top6.forEach((data, index) => {
+                const isLocked = today < data.unlockDate;
+                // Gọi hàm tạo card chi tiết bên dưới
+                const card = createCardMarkup(data, isLocked); 
+                
+                // Thiết lập vị trí 3D
+                const angle = index * 60; 
+                const radius = 220; // Khoảng cách từ trục đến thư
 
-        // Hiển thị nút tải thêm
-        if (loadMoreBtn) {
-            loadMoreBtn.style.display = (allMessages.length > limitCount) ? "inline-block" : "none";
+                // CHỈ DÙNG TRANSFORM ĐỂ ĐỊNH VỊ 3D
+                card.style.transform = `rotateY(${angle}deg) translateZ(${radius}px)`;
+                
+                carouselDiv.appendChild(card);
+            });
         }
 
+        // --- PHẦN 2: RENDER GRID (DANH SÁCH TẤT CẢ) ---
         listDiv.innerHTML = "";
+        const displayedMessages = allMessages.slice(0, limitCount);
+
         displayedMessages.forEach((data, index) => {
             const isLocked = today < data.unlockDate;
-            const card = document.createElement('div');
-            
-            // Chỉ áp dụng hiệu ứng fly-in cho những card mới xuất hiện ở trang hiện tại
-            // Ví dụ: khi ấn lần đầu hiện 6, khi ấn "Xem thêm" lần 2 thì card từ 7-12 sẽ bay
             const isNewLoad = index >= (limitCount - 6);
-            card.className = `capsule-card ${isLocked ? 'locked' : 'unlocked'} ${isNewLoad ? 'fly-in' : ''}`;
             
-            // Tạo độ trễ (delay) tăng dần: 0s, 0.1s, 0.2s... để bay từ trái sang lần lượt
+            const card = createCardMarkup(data, isLocked);
+            card.className += ` ${isNewLoad ? 'fly-in' : ''}`;
+            
             if (isNewLoad) {
                 card.style.animationDelay = `${(index % 6) * 0.15}s`;
             }
 
-            if (!isLocked) {
-                card.onclick = () => openLetter(data.sender, data.unlockDate, data.message);
-            }
-
-            card.innerHTML = `
-                <div class="lock-icon-center">🔒</div>
-                <div class="card-header">
-                    <strong>${data.sender}</strong>
-                    <span>📅 ${data.unlockDate}</span>
-                </div>
-                <div class="card-body">
-                    <p class="msg-text">${isLocked ? 'Thư đang bị khóa bí mật...' : data.message}</p>
-                </div>
-            `;
             listDiv.appendChild(card);
         });
 
-        filterCapsules(); // Giữ bộ lọc tìm kiếm hoạt động
+        // Điều khiển nút Xem thêm
+        if (loadMoreBtn) {
+            loadMoreBtn.style.display = (allMessages.length > limitCount) ? "inline-block" : "none";
+        }
     });
+}
+
+// HÀM QUAN TRỌNG: Tạo HTML cho thẻ thư (Dùng chung cho cả 2 phần)
+function createCardMarkup(data, isLocked) {
+    const card = document.createElement('div');
+    card.className = `capsule-card ${isLocked ? 'locked' : 'unlocked'}`;
+    
+    if (!isLocked) {
+        card.onclick = () => openLetter(data.sender, data.unlockDate, data.message);
+    }
+
+    card.innerHTML = `
+        <div class="lock-icon-center">🔒</div>
+        <div class="card-header">
+            <strong>${data.sender}</strong>
+            <span>📅 ${data.unlockDate}</span>
+        </div>
+        <div class="card-body">
+            <p class="msg-text">${isLocked ? 'Thư đang bị khóa bí mật...' : data.message}</p>
+        </div>
+    `;
+    return card;
 }
 
 // Hàm khi nhấn nút Tải thêm
@@ -608,4 +634,3 @@ window.addEventListener('click', function(e) {
         if (panel) panel.style.display = 'none';
     }
 });
-
