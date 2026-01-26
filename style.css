@@ -135,6 +135,7 @@ header h1 {
 .media-wrap {
     height: auto; /* Bỏ chiều cao cố định 200px trước đó */
     cursor: zoom-in;
+
 }
 
 /* Container bao quanh ảnh/video */
@@ -142,7 +143,7 @@ header h1 {
     position: relative; /* Cần thiết để căn giữa nút Play */
     height: auto; 
     cursor: zoom-in;
-    background: #000; /* Tạo nền đen để tránh hiện tượng trắng xóa trên điện thoại */
+    background: #eee; /* Tạo nền đen để tránh hiện tượng trắng xóa trên điện thoại */
     border-radius: 8px;
     overflow: hidden;
 }
@@ -582,6 +583,70 @@ video[poster] {
     background: rgba(0, 0, 0, 0.1);
 }
 
+/* --- PHẦN VÒNG QUAY 3D --- */
+/* Container chứa toàn bộ vùng 3D */
+.carousel-3d-container {
+    perspective: 2000px;
+    width: 100%;
+    height: 270px;
+    display: flex;
+    flex-direction: column; /* Xếp tiêu đề rồi đến vòng xoay */
+    justify-content: center; /* Căn giữa ngang */
+    padding: 60px 0;        /* Khoảng cách trên dưới */
+    align-items: center;     /* Căn giữa dọc */
+    overflow: visible;
+    position: relative;
+    margin: 50px 0;
+}
+
+/* TRỤC XOAY: Đây là cái kim của vòng quay */
+#capsule-carousel-3d {
+    position: absolute;
+    left: 50%; /* Đưa về chính giữa container */
+    top: 50%;
+    width: 0px; 
+    height: 0px;
+    transform-style: preserve-3d;
+    /* Không dùng margin ở đây để tránh lệch */
+    animation: rotateCarousel 20s linear infinite;
+}
+
+@keyframes rotateCarousel {
+    from { transform: rotateY(0deg); }
+    to { transform: rotateY(360deg); }
+}
+
+.carousel-3d-container h3 {
+    margin-bottom: 350px;    /* Tạo khoảng trống giữa chữ và tâm vòng xoay */
+    text-align: center;
+    z-index: 10;            /* Đảm bảo chữ luôn nằm trên các lá thư khi xoay */
+    font-size: 24px;
+    width: 100%;
+}
+/* THẺ THƯ: Phải căn giữa so với trục 0px bên trên */
+#capsule-carousel-3d .capsule-card {
+    position: absolute;
+    width: 200px;
+    height: 225px;
+    /* Căn card sao cho tâm card đè đúng vào tâm trục */
+    left: -100px; /* -1/2 width */
+    top: -112.5px;  /* -1/2 height */
+    
+    background: white;
+    border-radius: 15px;
+    backface-visibility: hidden;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+    
+    /* Xóa bỏ mọi transform cũ để JS gán mới không bị cộng dồn */
+    margin: 0 !important; 
+    animation: none !important;
+}
+
+/* Tạm dừng vòng quay khi di chuột */
+#capsule-carousel-3d:hover {
+    animation-play-state: paused;
+}
+
 /* Tùy chỉnh thanh cuộn cho đẹp */
 #capsule-messages-list::-webkit-scrollbar {
     width: 6px;
@@ -672,6 +737,7 @@ video[poster] {
     margin-bottom: 10px;
     color: #666;
 }
+
 
 /* Modal nền mờ */
 .letter-modal {
@@ -882,7 +948,7 @@ video[poster] {
 
 #music-toast {
     position: fixed;
-    top: -50px; /* Ban đầu ẩn ở phía trên */
+    top: -70px; /* Ban đầu ẩn ở phía trên */
     left: 50%;
     transform: translateX(-50%);
     background: rgba(0, 0, 0, 0.7);
@@ -901,3 +967,4 @@ video[poster] {
 #music-toast.show {
     top: 30px; /* Hiện xuống */
 }
+
