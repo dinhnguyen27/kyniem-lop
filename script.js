@@ -273,7 +273,7 @@ function handleReact(postId, type) {
 
 // 4. Đồng hồ đếm ngược (Sửa lỗi không chạy)
 function startCountdown() {
-    const examDate = new Date("June 15, 2026 00:00:00").getTime();
+    const examDate = new Date("June 12, 2026 00:00:00").getTime();
 
     const timer = setInterval(function() {
         const now = new Date().getTime();
@@ -608,3 +608,4 @@ window.addEventListener('click', function(e) {
         if (panel) panel.style.display = 'none';
     }
 });
+
