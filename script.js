@@ -125,7 +125,7 @@ function enterMainSite() {
 
     const container = document.getElementById('music-container');
     container.style.display = 'block';
-    playSong(0);
+    playSong(currentSongIndex, { showToast: false, fromLogin: true });
 
     confetti({
         particleCount: 150,
@@ -139,15 +139,16 @@ function enterMainSite() {
     createLeaves();
     loadTimeCapsuleMessages();
     updateCurrentUserDisplay();
-
-    const music = document.getElementById('bg-music');
-    if (music) music.play().catch(e => console.log('Nhạc bị chặn:', e));
 }
 
 function logoutUser() {
     localStorage.removeItem(SESSION_KEY);
     document.getElementById('main-content').style.display = 'none';
     document.getElementById('password-screen').style.display = 'flex';
+    if (audio) {
+        audio.pause();
+        syncMusicUI(false);
+    }
     showAuthMessage('Bạn đã đăng xuất.', false);
     switchAuthTab('login');
 }
@@ -164,6 +165,45 @@ const playlist = [
 ];
 let currentSongIndex = 0;
 const audio = document.getElementById('bg-music');
+
+function syncMusicUI(isPlaying) {
+    const playPauseIcon = document.getElementById('play-pause-icon');
+    const musicIcon = document.getElementById('music-icon');
+    if (playPauseIcon) {
+        playPauseIcon.className = isPlaying ? 'fas fa-pause' : 'fas fa-play';
+    }
+    if (musicIcon) {
+        musicIcon.classList.toggle('rotating', isPlaying);
+    }
+}
+
+
+let shouldResumeMusicOnGesture = false;
+
+function requestMusicResumeOnGesture() {
+    if (shouldResumeMusicOnGesture) return;
+    shouldResumeMusicOnGesture = true;
+
+    const resume = () => {
+        if (!audio) return;
+        audio.play().then(() => {
+            shouldResumeMusicOnGesture = false;
+            document.removeEventListener('click', resume, true);
+            document.removeEventListener('touchstart', resume, true);
+        }).catch(() => {});
+    };
+
+    document.addEventListener('click', resume, true);
+    document.addEventListener('touchstart', resume, true);
+}
+
+if (audio) {
+    audio.loop = false;
+    audio.removeEventListener('ended', changeMusic);
+    audio.addEventListener('ended', changeMusic);
+    audio.addEventListener('play', () => syncMusicUI(true));
+    audio.addEventListener('pause', () => syncMusicUI(false));
+}
 
 // 2. Hàm mở Menu nhạc
 function toggleMusicMenu() {
@@ -207,31 +247,43 @@ function renderPlaylist() {
     ).join('');
 }
 
-function playSong(index) {
-    const audio = document.getElementById('bg-music');
-    const musicIcon = document.getElementById('music-icon');
-    
-    currentSongIndex = index;
-    audio.src = playlist[index].url;
-    audio.play();
-    
-    // Gọi thông báo tên bài hát ở đây
-    showMusicToast(playlist[index].name);
+function playSong(index, options = {}) {
+    if (!audio || !playlist[index]) return;
 
-    if(musicIcon) musicIcon.classList.add('rotating');
+    const { showToast = true, fromLogin = false } = options;
+    currentSongIndex = index;
+
+    const nextUrl = playlist[index].url;
+    if (audio.src !== nextUrl) {
+        audio.pause();
+        audio.src = nextUrl;
+        audio.load();
+    } else {
+        audio.currentTime = 0;
+    }
+
+    audio.play().then(() => {
+        if (showToast) showMusicToast(playlist[index].name);
+    }).catch((e) => {
+        console.log('Nhạc bị chặn:', e);
+        if (fromLogin) requestMusicResumeOnGesture();
+    });
+
     renderPlaylist();
 }
 
 function toggleMusic() {
-    const icon = document.getElementById('play-pause-icon');
+    if (!audio) return;
+
+    if (!audio.src) {
+        playSong(currentSongIndex);
+        return;
+    }
+
     if (audio.paused) {
-        audio.play();
-        icon.className = "fas fa-pause"; // Đổi thành icon Tạm dừng
-        document.getElementById('music-icon').classList.add('rotating');
+        audio.play().catch((e) => console.log('Nhạc bị chặn:', e));
     } else {
         audio.pause();
-        icon.className = "fas fa-play"; // Đổi thành icon Phát
-        document.getElementById('music-icon').classList.remove('rotating');
     }
 }
 
@@ -541,10 +593,18 @@ function createLeaves() {
 
 function showSurprise() {
     const allCards = document.querySelectorAll('.media-wrap');
-    if (allCards.length > 0) {
-        const randomIndex = Math.floor(Math.random() * allCards.length);
-        openLightbox(allCards[randomIndex]);
-    }
+    if (allCards.length === 0) return;
+
+    const randomIndex = Math.floor(Math.random() * allCards.length);
+    const randomCard = allCards[randomIndex];
+    const media = randomCard.querySelector('img, video');
+    if (!media) return;
+
+    const isVideo = media.tagName.toLowerCase() === 'video';
+    const sourceUrl = media.getAttribute('src') || media.currentSrc;
+    if (!sourceUrl) return;
+
+    openLightbox(sourceUrl, isVideo);
 }
 
 // Cho phép nhấn Enter để mở khóa
@@ -770,6 +830,17 @@ window.onclick = function(event) {
     const modal = document.getElementById('letter-modal');
     if (event.target == modal) closeLetter();
 }
+
+
+
+document.addEventListener('keydown', (event) => {
+    const modal = document.getElementById('letter-modal');
+    if (!modal || modal.style.display !== 'flex') return;
+
+    if (event.key === 'Escape' || event.key.toLowerCase() === 'x') {
+        closeLetter();
+    }
+});
 
 window.addEventListener('click', function(e) {
     const container = document.getElementById('music-container');
