@@ -42,7 +42,7 @@
         <ul id="song-list"></ul>
     </div>
 
-    <audio id="bg-music" loop></audio>
+    <audio id="bg-music"></audio>
 </div>
 
 
@@ -156,7 +156,13 @@
             
 </div>
 
-        
+        <div id="leaf-container"></div>
+        <div style="text-align: center; margin-bottom: 20px;">
+            <small style="color: #666; cursor: pointer; text-decoration: underline;" 
+                onclick="changeMyName()">
+                Đổi tên bình luận
+            </small>
+        </div>
         
     </div>
 
@@ -174,6 +180,7 @@
         <div class="letter-content">
             <span class="close-letter" onclick="closeLetter()">&times;</span>
             <div class="letter-paper">
+                <button class="close-letter-mobile" onclick="closeLetter()" aria-label="Đóng thư">✕ Đóng</button>
                 <h3 id="modal-sender">Từ: ...</h3>
                 <p id="modal-date" style="font-size: 0.8rem; color: #888;">Ngày mở: ...</p>
                 <hr>
