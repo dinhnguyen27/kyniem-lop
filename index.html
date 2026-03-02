@@ -44,16 +44,34 @@
 
     <audio id="bg-music" loop></audio>
 </div>
-    
-    </div>
+
 
     <div id="password-screen">
-        <div class="lock-box">
-            <h2>🔒 Kho tàng kỷ niệm</h2>
-            <p>Vui lòng nhập mật mã của lớp để tiếp tục</p>
-            <input type="password" id="pass-input" placeholder="Mật khẩu là gì nhỉ?">
-            <button onclick="checkPassword()">Mở khóa</button>
-            <p id="error-msg" style="color: #ff4d4d; display: none; margin-top: 10px;">Sai mật mã rồi bạn ơi! 🤫</p>
+        <div class="lock-box auth-box">
+            <h2>🔐 Tài khoản thành viên lớp</h2>
+            <p>Đăng ký/đăng nhập để tương tác thuận tiện hơn trên web.</p>
+
+            <div class="auth-tabs">
+                <button id="tab-login" class="auth-tab active" onclick="switchAuthTab('login')">Đăng nhập</button>
+                <button id="tab-register" class="auth-tab" onclick="switchAuthTab('register')">Đăng ký</button>
+            </div>
+
+            <div id="auth-login" class="auth-panel active">
+                <input type="email" id="login-email" placeholder="Email của bạn">
+                <input type="password" id="login-password" placeholder="Mật khẩu">
+                <button onclick="checkPassword()">Đăng nhập vào web</button>
+            </div>
+
+            <div id="auth-register" class="auth-panel">
+                <input type="text" id="register-name" placeholder="Họ và tên">
+                <input type="tel" id="register-phone" placeholder="Số điện thoại">
+                <input type="email" id="register-email" placeholder="Email">
+                <input type="password" id="register-password" placeholder="Mật khẩu (ít nhất 6 ký tự)">
+                <button onclick="registerAccount()">Tạo tài khoản</button>
+            </div>
+
+            <p id="error-msg" style="color: #ff4d4d; display: none; margin-top: 12px;"></p>
+            <p id="auth-success" style="color: #73ffca; display: none; margin-top: 8px;"></p>
         </div>
     </div>
 
@@ -61,6 +79,10 @@
         <header>
             <h1>Hành Trình Thanh Xuân</h1>
             <p>Nơi lưu giữ những mảnh ghép thời học sinh</p>
+            <div class="user-chip">
+                <span id="current-user-display">Bạn chưa đăng nhập</span>
+                <button onclick="logoutUser()">Đăng xuất</button>
+            </div>
         </header>
 
         <div class="countdown-container">
@@ -134,13 +156,7 @@
             
 </div>
 
-        <div id="leaf-container"></div>
-        <div style="text-align: center; margin-bottom: 20px;">
-            <small style="color: #666; cursor: pointer; text-decoration: underline;" 
-                onclick="changeMyName()">
-                Đổi tên bình luận
-            </small>
-        </div>
+        
         
     </div>
 
