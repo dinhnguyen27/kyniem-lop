@@ -46,6 +46,68 @@
     background: #feb47b;
     transform: scale(1.05);
 }
+
+.auth-box {
+    width: min(92vw, 420px);
+}
+
+.auth-tabs {
+    display: flex;
+    gap: 8px;
+    margin-top: 15px;
+}
+
+.auth-tab {
+    flex: 1;
+    margin: 0;
+    padding: 10px;
+    border-radius: 20px;
+    border: 1px solid rgba(255,255,255,0.35);
+    background: rgba(255,255,255,0.18);
+    color: #fff;
+}
+
+.auth-tab.active {
+    background: #ff7e5f;
+}
+
+.auth-panel {
+    display: none;
+}
+
+.auth-panel.active {
+    display: block;
+}
+
+.auth-panel input,
+.auth-panel button {
+    width: 100%;
+    margin-top: 12px;
+}
+
+.lock-box .auth-panel button {
+    margin-left: 0;
+}
+
+.user-chip {
+    margin-top: 14px;
+    display: inline-flex;
+    gap: 10px;
+    align-items: center;
+    background: rgba(255,255,255,0.2);
+    color: white;
+    padding: 8px 14px;
+    border-radius: 30px;
+}
+
+.user-chip button {
+    border: none;
+    background: #ff7e5f;
+    color: #fff;
+    border-radius: 20px;
+    padding: 6px 12px;
+    cursor: pointer;
+}
 * { box-sizing: border-box; }
 body {
     margin: 0;
@@ -700,12 +762,48 @@ video[poster] {
     animation: fadeInUp 0.4s ease forwards;
 }
 
+/* Container riêng cho đếm ngược của thư */
+.letter-timer-box {
+    margin-top: auto;
+    background: rgba(255, 255, 255, 0.2); /* Nền kính mờ */
+    backdrop-filter: blur(10px); /* Làm mờ hậu cảnh kiểu iOS */
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    border-radius: 12px;
+    padding: 10px;
+    text-align: center;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+}
+
+.timer-label {
+    font-size: 0.7rem;
+    color: #555;
+    font-weight: bold;
+    margin-bottom: 3px;
+}
+
+.timer-countdown-text {
+    font-family: 'Courier New', monospace;
+    color: #d81b60; /* Màu đỏ hồng đậm để nổi bật trên nền kính */
+    font-weight: 900;
+    font-size: 1rem;
+    text-shadow: 0 0 10px rgba(216, 27, 96, 0.2);
+}
+
 /* Hiệu ứng KHI THƯ BỊ KHÓA */
 .capsule-card.locked {
-    filter: blur(5px) grayscale(1);
-    pointer-events: none;
+    background: rgba(255, 255, 255, 0.6); /* Nền trắng trong suốt nhẹ */
+    cursor: help;
+    pointer-events: auto !important; /* Cho phép nhận sự kiện click */
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+/* Làm mờ tên người gửi và nội dung khi khóa */
+.locked .card-header strong, 
+.locked .msg-text {
+    filter: blur(8px);
     user-select: none;
-    opacity: 0.7;
+    opacity: 1;
 }
 
 /* Hiệu ứng KHI THƯ ĐÃ MỞ */
@@ -967,4 +1065,3 @@ video[poster] {
 #music-toast.show {
     top: 30px; /* Hiện xuống */
 }
-
