@@ -15,6 +15,143 @@ if (!firebase.apps.length) {
 }
 const db = firebase.firestore();
 
+
+const ACCOUNTS_KEY = 'class_accounts';
+const SESSION_KEY = 'class_current_user';
+
+function getSavedAccounts() {
+    return JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || '[]');
+}
+
+function saveAccounts(accounts) {
+    localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
+}
+
+function getCurrentUser() {
+    return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
+}
+
+function updateCurrentUserDisplay() {
+    const user = getCurrentUser();
+    const chip = document.getElementById('current-user-display');
+    if (chip) {
+        chip.innerText = user ? `${user.name} • ${user.phone} • ${user.email}` : 'Bạn chưa đăng nhập';
+    }
+
+    const senderInput = document.getElementById('capsule-sender');
+    if (senderInput && user) {
+        senderInput.value = user.name;
+    }
+}
+
+function showAuthMessage(message, isError = true) {
+    const err = document.getElementById('error-msg');
+    const ok = document.getElementById('auth-success');
+    if (!err || !ok) return;
+
+    if (isError) {
+        err.innerText = message;
+        err.style.display = 'block';
+        ok.style.display = 'none';
+    } else {
+        ok.innerText = message;
+        ok.style.display = 'block';
+        err.style.display = 'none';
+    }
+}
+
+function switchAuthTab(tab) {
+    const isLogin = tab === 'login';
+    document.getElementById('tab-login')?.classList.toggle('active', isLogin);
+    document.getElementById('tab-register')?.classList.toggle('active', !isLogin);
+    document.getElementById('auth-login')?.classList.toggle('active', isLogin);
+    document.getElementById('auth-register')?.classList.toggle('active', !isLogin);
+    showAuthMessage('', false);
+    document.getElementById('error-msg').style.display = 'none';
+    document.getElementById('auth-success').style.display = 'none';
+}
+
+async function registerAccount() {
+    const name = document.getElementById('register-name').value.trim();
+    const phone = document.getElementById('register-phone').value.trim();
+    const email = document.getElementById('register-email').value.trim().toLowerCase();
+    const password = document.getElementById('register-password').value;
+
+    const phoneRegex = /^0\d{9,10}$/;
+    if (!name || !phone || !email || !password) return showAuthMessage('Vui lòng nhập đầy đủ họ tên, số điện thoại, email và mật khẩu.');
+    if (!phoneRegex.test(phone)) return showAuthMessage('Số điện thoại chưa đúng định dạng (VD: 09xxxxxxxx).');
+    if (password.length < 6) return showAuthMessage('Mật khẩu cần ít nhất 6 ký tự.');
+
+    try {
+        const [emailSnap, phoneSnap] = await Promise.all([
+            db.collection('users').where('email', '==', email).limit(1).get(),
+            db.collection('users').where('phone', '==', phone).limit(1).get()
+        ]);
+
+        if (!emailSnap.empty || !phoneSnap.empty) {
+            return showAuthMessage('Email hoặc số điện thoại đã được đăng ký.');
+        }
+
+        await db.collection('users').add({
+            name,
+            phone,
+            email,
+            password,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        const localAccounts = getSavedAccounts();
+        if (!localAccounts.some((a) => a.email === email)) {
+            localAccounts.push({ name, phone, email, password });
+            saveAccounts(localAccounts);
+        }
+
+        document.getElementById('register-name').value = '';
+        document.getElementById('register-phone').value = '';
+        document.getElementById('register-email').value = '';
+        document.getElementById('register-password').value = '';
+
+        showAuthMessage('Tạo tài khoản thành công và đã lưu Firebase! Mời bạn đăng nhập.', false);
+        switchAuthTab('login');
+    } catch (error) {
+        console.error('Lỗi đăng ký Firebase:', error);
+        showAuthMessage('Không thể đăng ký lên Firebase. Vui lòng kiểm tra quyền Firestore hoặc thử lại.');
+    }
+}
+
+function enterMainSite() {
+    document.getElementById('password-screen').style.display = 'none';
+    document.getElementById('main-content').style.display = 'block';
+
+    const container = document.getElementById('music-container');
+    container.style.display = 'block';
+    playSong(0);
+
+    confetti({
+        particleCount: 150,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: ['#ff4d4d', '#ffffff', '#ff7e5f']
+    });
+
+    loadGallery();
+    startCountdown();
+    createLeaves();
+    loadTimeCapsuleMessages();
+    updateCurrentUserDisplay();
+
+    const music = document.getElementById('bg-music');
+    if (music) music.play().catch(e => console.log('Nhạc bị chặn:', e));
+}
+
+function logoutUser() {
+    localStorage.removeItem(SESSION_KEY);
+    document.getElementById('main-content').style.display = 'none';
+    document.getElementById('password-screen').style.display = 'flex';
+    showAuthMessage('Bạn đã đăng xuất.', false);
+    switchAuthTab('login');
+}
+
 // 2. Hàm Tải Ảnh từ Firebase (Quan trọng nhất)
 let currentYearFilter = 'all';
 
@@ -214,16 +351,11 @@ function loadGallery() {
     });
 }
 function getUserName() {
-    let userName = localStorage.getItem("class_user_name");
-    if (!userName) {
-        userName = prompt("Vui lòng nhập tên của bạn để bình luận (VD: Tuấn Anh A1):");
-        if (userName && userName.trim() !== "") {
-            localStorage.setItem("class_user_name", userName.trim());
-        } else {
-            userName = "Thành viên ẩn danh"; // Tên mặc định nếu họ không nhập
-        }
-    }
-    return userName;
+    const user = getCurrentUser();
+    if (user?.name) return user.name;
+
+    const fallbackName = localStorage.getItem('class_user_name');
+    return fallbackName || 'Thành viên ẩn danh';
 }
 
 // Hàm gửi bình luận đã nâng cấp
@@ -300,38 +432,36 @@ function startCountdown() {
 }
 
 // 5. Kiểm tra mật khẩu và khởi động web
-function checkPassword() {
-    const pass = document.getElementById('pass-input').value;
-    const correctPass = "123456"; 
+async function checkPassword() {
+    const email = document.getElementById('login-email').value.trim().toLowerCase();
+    const password = document.getElementById('login-password').value;
+    if (!email || !password) return showAuthMessage('Vui lòng nhập email và mật khẩu để đăng nhập.');
 
-    if (pass === correctPass) {
-        // 1. Ẩn màn hình khóa và hiện nội dung chính
-        document.getElementById('password-screen').style.display = 'none';
-        document.getElementById('main-content').style.display = 'block';
-        
-        // HIỆN TRÌNH NHẠC VÀ PHÁT TỰ ĐỘNG
-        const container = document.getElementById('music-container');
-        container.style.display = 'block';
-        playSong(0);
-        
-        // 2. Bắn pháo giấy chúc mừng
-        confetti({
-            particleCount: 150,
-            spread: 70,
-            origin: { y: 0.6 },
-            colors: ['#ff4d4d', '#ffffff', '#ff7e5f']
-        });
+    try {
+        const userSnap = await db.collection('users')
+            .where('email', '==', email)
+            .where('password', '==', password)
+            .limit(1)
+            .get();
 
-        // 3. Khởi tạo các tính năng khác
-        loadGallery();
-        startCountdown();
-        createLeaves(); // Gọi hàm tạo hoa phượng
-        loadTimeCapsuleMessages();
-        
-        const music = document.getElementById('bg-music');
-        if(music) music.play().catch(e => console.log("Nhạc bị chặn:", e));
-    } else {
-        document.getElementById('error-msg').style.display = 'block';
+        let account = null;
+        if (!userSnap.empty) {
+            account = userSnap.docs[0].data();
+        } else {
+            const accounts = getSavedAccounts();
+            account = accounts.find((a) => a.email === email && a.password === password) || null;
+        }
+
+        if (!account) return showAuthMessage('Sai email hoặc mật khẩu. Vui lòng thử lại.');
+
+        const sessionUser = { name: account.name, phone: account.phone, email: account.email };
+        localStorage.setItem(SESSION_KEY, JSON.stringify(sessionUser));
+        localStorage.setItem('class_user_name', account.name);
+        showAuthMessage('Đăng nhập thành công!', false);
+        enterMainSite();
+    } catch (error) {
+        console.error('Lỗi đăng nhập Firebase:', error);
+        showAuthMessage('Không đăng nhập được do lỗi kết nối Firebase.');
     }
 }
 
@@ -418,16 +548,34 @@ function showSurprise() {
 }
 
 // Cho phép nhấn Enter để mở khóa
-document.getElementById('pass-input')?.addEventListener("keypress", (e) => {
-    if (e.key === "Enter") checkPassword();
+document.getElementById('login-password')?.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') checkPassword();
 });
 
 function changeMyName() {
-    const newName = prompt("Nhập tên mới của bạn:");
-    if (newName && newName.trim() !== "") {
-        localStorage.setItem("class_user_name", newName.trim());
-        alert("Đã đổi tên thành: " + newName);
+    const user = getCurrentUser();
+    const newName = prompt('Nhập tên mới của bạn:', user?.name || '');
+    if (!newName || newName.trim() === '') return;
+
+    const normalizedName = newName.trim();
+    localStorage.setItem('class_user_name', normalizedName);
+
+    if (!user) {
+        alert('Đã đổi tên thành: ' + normalizedName);
+        return;
     }
+
+    const accounts = getSavedAccounts();
+    const index = accounts.findIndex((a) => a.email === user.email);
+    if (index !== -1) {
+        accounts[index].name = normalizedName;
+        saveAccounts(accounts);
+    }
+
+    const updatedUser = { ...user, name: normalizedName };
+    localStorage.setItem(SESSION_KEY, JSON.stringify(updatedUser));
+    updateCurrentUserDisplay();
+    alert('Đã cập nhật tên thành: ' + normalizedName);
 }
 
 // Hàm xử lý thả cảm xúc (Lưu danh sách tên)
@@ -459,7 +607,8 @@ async function handleReact(postId, type) {
 }
 
 async function sendTimeCapsule() {
-    const sender = document.getElementById('capsule-sender').value.trim();
+    const user = getCurrentUser();
+    const sender = document.getElementById('capsule-sender').value.trim() || user?.name || '';
     const msg = document.getElementById('capsule-message').value.trim();
     const unlockDateValue = document.getElementById('unlock-date-input').value; // Định dạng YYYY-MM-DD
     
@@ -474,7 +623,8 @@ async function sendTimeCapsule() {
         });
         
         alert("💌 Thư đã được khóa lại cho đến ngày " + unlockDateValue);
-        // Reset form...
+        document.getElementById('capsule-message').value = '';
+        document.getElementById('unlock-date-input').value = '';
     } catch (e) { alert("Lỗi: " + e.message); }
 }
 
@@ -635,3 +785,14 @@ window.addEventListener('click', function(e) {
     }
 });
 
+
+
+window.addEventListener('DOMContentLoaded', () => {
+    const user = getCurrentUser();
+    if (user) {
+        enterMainSite();
+    } else {
+        switchAuthTab('login');
+    }
+    updateCurrentUserDisplay();
+});
