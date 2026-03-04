@@ -74,6 +74,7 @@ function switchAuthTab(tab) {
 
 async function registerAccount() {
     if (IS_FILE_PROTOCOL) return showAuthMessage('Bạn đang mở web bằng file:// nên Firebase dễ lỗi. Hãy chạy bằng localhost hoặc deploy (GitHub Pages/Firebase Hosting).');
+
     const name = document.getElementById('register-name').value.trim();
     const phone = document.getElementById('register-phone').value.trim();
     const email = document.getElementById('register-email').value.trim().toLowerCase();
@@ -85,24 +86,39 @@ async function registerAccount() {
     if (password.length < 6) return showAuthMessage('Mật khẩu cần ít nhất 6 ký tự.');
 
     try {
-        const [emailSnap, phoneSnap] = await Promise.all([
-            db.collection('users').where('email', '==', email).limit(1).get(),
-            db.collection('users').where('phone', '==', phone).limit(1).get()
-        ]);
+        // B1: check trùng trong Firestore (nếu rules cho phép)
+        try {
+            const [emailSnap, phoneSnap] = await Promise.all([
+                db.collection('users').where('email', '==', email).limit(1).get(),
+                db.collection('users').where('phone', '==', phone).limit(1).get()
+            ]);
 
-        if (!emailSnap.empty || !phoneSnap.empty) {
-            return showAuthMessage('Email hoặc số điện thoại đã được đăng ký.');
+            if (!emailSnap.empty || !phoneSnap.empty) {
+                return showAuthMessage('Email hoặc số điện thoại đã được đăng ký.');
+            }
+        } catch (precheckError) {
+            if (precheckError?.code !== 'permission-denied') throw precheckError;
+            console.warn('Không có quyền kiểm tra trùng users trên Firestore, tiếp tục đăng ký bằng Auth.', precheckError);
         }
 
+        // B2: tạo tài khoản Auth
         await auth.createUserWithEmailAndPassword(email, password);
         await auth.currentUser?.updateProfile({ displayName: name });
 
-        await db.collection('users').add({
-            name,
-            phone,
-            email,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
+        // B3: lưu profile Firestore (nếu không có quyền thì vẫn coi là đăng ký thành công Auth)
+        let profileStored = true;
+        try {
+            await db.collection('users').add({
+                name,
+                phone,
+                email,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        } catch (profileWriteError) {
+            profileStored = false;
+            if (profileWriteError?.code !== 'permission-denied') throw profileWriteError;
+            console.warn('Tạo Auth thành công nhưng không ghi được profile users do Firestore rules.', profileWriteError);
+        }
 
         const localAccounts = getSavedAccounts();
         if (!localAccounts.some((a) => a.email === email)) {
@@ -117,13 +133,24 @@ async function registerAccount() {
         document.getElementById('register-email').value = '';
         document.getElementById('register-password').value = '';
 
-        showAuthMessage('Tạo tài khoản thành công và đã lưu Firebase! Mời bạn đăng nhập.', false);
+        if (profileStored) {
+            showAuthMessage('Tạo tài khoản thành công! Mời bạn đăng nhập.', false);
+        } else {
+            showAuthMessage('Tạo tài khoản Auth thành công, nhưng chưa lưu được hồ sơ Firestore (do rules). Bạn vẫn có thể đăng nhập.', false);
+        }
         switchAuthTab('login');
     } catch (error) {
         console.error('Lỗi đăng ký Firebase:', error);
-        showAuthMessage('Không thể đăng ký lên Firebase. Vui lòng kiểm tra quyền Firestore hoặc thử lại.');
+        if (error?.code === 'auth/email-already-in-use') {
+            return showAuthMessage('Email này đã tồn tại trên Firebase Authentication. Hãy dùng Quên mật khẩu để đặt lại.');
+        }
+        if (error?.code === 'auth/unauthorized-domain') {
+            return showAuthMessage('Domain hiện tại chưa nằm trong Authorized domains của Firebase Auth.');
+        }
+        showAuthMessage(`Không thể đăng ký lúc này (${error?.code || 'unknown-error'}).`);
     }
 }
+
 
 function enterMainSite() {
     document.getElementById('password-screen').style.display = 'none';
@@ -578,19 +605,27 @@ async function sendPasswordResetCode() {
     if (!email) return showAuthMessage('Nhập email đăng nhập trước khi gửi mã xác thực.', true);
 
     try {
-        await auth.sendPasswordResetEmail(email);
+        const actionCodeSettings = {
+            url: window.location.origin,
+            handleCodeInApp: false
+        };
+        await auth.sendPasswordResetEmail(email, actionCodeSettings);
         showAuthMessage('Đã gửi email xác thực đặt lại mật khẩu. Vui lòng kiểm tra Gmail (hộp thư đến/spam).', false);
     } catch (error) {
         if (error?.code === 'auth/user-not-found') {
             return showAuthMessage('Email này chưa có trên Firebase Authentication nên chưa thể gửi mã. Hãy liên hệ admin để bật tài khoản Auth.');
         }
-        if (error?.code === 'auth/unauthorized-domain') {
+        if (error?.code === 'auth/unauthorized-domain' || error?.code === 'auth/invalid-continue-uri') {
             return showAuthMessage('Domain hiện tại chưa nằm trong Authorized domains của Firebase Auth.');
+        }
+        if (error?.code === 'auth/internal-error') {
+            return showAuthMessage('Firebase đang trả về internal-error. Hãy kiểm tra Authorized domains, Email/Password provider và thử lại sau ít phút.');
         }
         console.error('Lỗi gửi email đặt lại mật khẩu:', error);
         showAuthMessage(`Không gửi được mã xác thực lúc này (${error?.code || 'unknown-error'}).`);
     }
 }
+
 
 function createLeaves() {
     const container = document.getElementById('leaf-container');
