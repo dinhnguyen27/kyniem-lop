@@ -19,6 +19,7 @@ const db = firebase.firestore();
 const ACCOUNTS_KEY = 'class_accounts';
 const SESSION_KEY = 'class_current_user';
 const UNLOCK_NOTIFY_KEY = 'class_capsule_notified_unlocks';
+const CHAT_READ_KEY = 'class_chat_read_state';
 
 let unlockWatcherInitialized = false;
 let notifiedUnlockIds = new Set(JSON.parse(localStorage.getItem(UNLOCK_NOTIFY_KEY) || '[]'));
@@ -32,6 +33,8 @@ let selectedChatUser = null;
 let chatUsersCache = [];
 let allChatUsers = [];
 let lastMessageAtByEmail = {};
+let unreadCountsByEmail = {};
+let chatReadState = JSON.parse(localStorage.getItem(CHAT_READ_KEY) || '{}');
 
 const CHAT_EMOJIS = ['😀','😁','😂','🤣','😊','😍','🥰','😘','😎','🤩','😢','😭','😡','👍','👏','🙏','🔥','🎉','💖','💬','🌸','🎓','🫶','✨'];
 
@@ -187,6 +190,33 @@ function closePrivateChat() {
     document.getElementById('emoji-picker')?.classList.remove('show');
 }
 
+function saveChatReadState() {
+    localStorage.setItem(CHAT_READ_KEY, JSON.stringify(chatReadState));
+}
+
+function updateGlobalChatUnreadBadge() {
+    const badge = document.getElementById('chat-unread-badge');
+    if (!badge) return;
+
+    const senders = Object.values(unreadCountsByEmail).filter((c) => Number(c) > 0).length;
+    if (senders <= 0) {
+        badge.style.display = 'none';
+        return;
+    }
+
+    badge.style.display = 'inline-flex';
+    badge.textContent = senders > 99 ? '99+' : String(senders);
+}
+
+function markChatAsRead(otherEmail, timestamp = Date.now()) {
+    if (!otherEmail) return;
+    const key = otherEmail.toLowerCase();
+    chatReadState[key] = Math.max(Number(chatReadState[key] || 0), Number(timestamp || 0));
+    unreadCountsByEmail[key] = 0;
+    saveChatReadState();
+    updateGlobalChatUnreadBadge();
+}
+
 function sortChatUsersByLatest(users) {
     return [...users].sort((a, b) => {
         const aTs = Number(lastMessageAtByEmail[(a.email || '').toLowerCase()] || 0);
@@ -206,18 +236,31 @@ function initRecentMessagesRanking() {
         .where('participants', 'array-contains', me.email.toLowerCase())
         .onSnapshot((snap) => {
             const latest = {};
+            const unread = {};
+            const myEmail = me.email.toLowerCase();
+
             snap.forEach((doc) => {
                 const data = doc.data();
                 const sender = (data.senderEmail || '').toLowerCase();
                 const receiver = (data.receiverEmail || '').toLowerCase();
-                const other = sender === me.email.toLowerCase() ? receiver : sender;
+                const other = sender === myEmail ? receiver : sender;
                 if (!other) return;
 
                 const ts = Number(data.createdAt || 0);
                 if (!latest[other] || ts > latest[other]) latest[other] = ts;
+
+                const lastRead = Number(chatReadState[other] || 0);
+                const isIncoming = receiver === myEmail && sender === other;
+                const isInOpenChat = selectedChatUser && other === (selectedChatUser.email || '').toLowerCase();
+
+                if (isIncoming && ts > lastRead && !isInOpenChat) {
+                    unread[other] = (unread[other] || 0) + 1;
+                }
             });
 
             lastMessageAtByEmail = latest;
+            unreadCountsByEmail = unread;
+            updateGlobalChatUnreadBadge();
             if (allChatUsers.length) renderChatUsers(allChatUsers);
         }, (error) => {
             console.warn('Không tải được xếp hạng tin nhắn mới nhất:', error);
@@ -240,10 +283,12 @@ function renderChatUsers(users) {
         const online = getOnlineStateFromTimestamp(u.lastActiveAt) && !!u.isOnline;
         const avatar = u.avatar || buildAvatarUrl(u.name || 'Bạn');
         const email = (u.email || '').replace(/'/g, "\'");
+        const unreadCount = Number(unreadCountsByEmail[(u.email || '').toLowerCase()] || 0);
         return `<div class="chat-user-item ${online ? 'online' : ''}" onclick="openPrivateChatByEmail('${email}')">
             <span class="dot"></span>
             <img class="comment-avatar" src="${avatar}" alt="avatar">
-            <span>${u.name || u.email} • ${online ? 'Online' : 'Offline'}</span>
+            <span class="chat-user-label">${u.name || u.email} • ${online ? 'Online' : 'Offline'}</span>
+            <span class="chat-user-unread ${unreadCount > 0 ? 'show' : ''}">${unreadCount > 99 ? '99+' : unreadCount}</span>
         </div>`;
     }).join('');
 }
@@ -256,6 +301,8 @@ function openPrivateChatByEmail(email) {
     panel?.classList.add('in-conversation');
     document.getElementById('emoji-picker')?.classList.remove('show');
     document.getElementById('chat-target-name').textContent = selectedChatUser.name || selectedChatUser.email;
+    markChatAsRead(selectedChatUser.email);
+    if (allChatUsers.length) renderChatUsers(allChatUsers);
     loadPrivateMessages();
 }
 
@@ -287,13 +334,21 @@ function loadPrivateMessages() {
         docs.sort((a, b) => Number(a.createdAt || 0) - Number(b.createdAt || 0));
 
         let html = '';
+        let latestIncomingTs = 0;
         docs.forEach((data) => {
             const isMe = (data.senderEmail || '').toLowerCase() === me.email.toLowerCase();
             const safeText = escapeHtml(data.text || '');
             const senderName = escapeHtml(data.senderName || (isMe ? (me.name || 'Bạn') : (selectedChatUser?.name || 'Bạn ấy')));
             const timeText = formatChatTime(data.createdAt);
+            const ts = Number(data.createdAt || 0);
+            if (!isMe && ts > latestIncomingTs) latestIncomingTs = ts;
             html += `<div class="chat-bubble ${isMe ? 'me' : 'other'}">${safeText}<span class="meta">${senderName} • ${timeText}</span></div>`;
         });
+
+        if (latestIncomingTs && selectedChatUser?.email) {
+            markChatAsRead(selectedChatUser.email, latestIncomingTs);
+            if (allChatUsers.length) renderChatUsers(allChatUsers);
+        }
 
         messagesBox.innerHTML = html || '<p style="color:#888">Chưa có tin nhắn nào.</p>';
         messagesBox.scrollTop = messagesBox.scrollHeight;
