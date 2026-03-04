@@ -84,6 +84,7 @@
             <div class="user-chip">
                 <img id="current-user-avatar" class="user-avatar" src="" alt="avatar">
                 <span id="current-user-display">Bạn chưa đăng nhập</span>
+                <span id="online-status" class="online-status offline">Offline</span>
                 <button onclick="openProfileModal()">Hồ sơ</button>
                 <button onclick="logoutUser()">Đăng xuất</button>
             </div>
@@ -162,6 +163,25 @@
 
         <div id="leaf-container"></div>     
         
+    </div>
+
+    <button id="chat-toggle-btn" class="chat-toggle-btn" onclick="toggleChatPanel()">💬 Chat</button>
+    <div id="chat-panel" class="chat-panel">
+        <div class="chat-panel-header">
+            <strong>Trò chuyện riêng</strong>
+            <button onclick="toggleChatPanel()">✕</button>
+        </div>
+        <div class="chat-users" id="chat-users"></div>
+        <div class="chat-active" id="chat-active" style="display:none;">
+            <div class="chat-active-header">
+                <span id="chat-target-name">Chọn người để chat</span>
+            </div>
+            <div class="chat-messages" id="chat-messages"></div>
+            <div class="chat-input-row">
+                <input id="chat-input" type="text" placeholder="Nhắn gì đó..." onkeypress="if(event.key==='Enter') sendPrivateMessage()">
+                <button onclick="sendPrivateMessage()">Gửi</button>
+            </div>
+        </div>
     </div>
 
     <div id="profile-modal" class="profile-modal">
