@@ -23,6 +23,13 @@ const UNLOCK_NOTIFY_KEY = 'class_capsule_notified_unlocks';
 let unlockWatcherInitialized = false;
 let notifiedUnlockIds = new Set(JSON.parse(localStorage.getItem(UNLOCK_NOTIFY_KEY) || '[]'));
 
+const ONLINE_ACTIVE_WINDOW_MS = 120000;
+let presenceInterval = null;
+let usersUnsubscribe = null;
+let chatUnsubscribe = null;
+let selectedChatUser = null;
+let chatUsersCache = [];
+
 
 function buildAvatarUrl(name = 'Thành viên lớp') {
     return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=ff7e5f&color=fff`;
@@ -103,6 +110,149 @@ function notifyUnlockedMessages(allMessages, today) {
 
     if ('Notification' in window && Notification.permission === 'granted') {
         new Notification('Hộp thư thời gian', { body: message });
+    }
+}
+
+function getOnlineStateFromTimestamp(lastActiveAt) {
+    if (!lastActiveAt) return false;
+    return Date.now() - Number(lastActiveAt) <= ONLINE_ACTIVE_WINDOW_MS;
+}
+
+function updateOwnOnlineBadge() {
+    const badge = document.getElementById('online-status');
+    if (!badge) return;
+
+    const isOnline = navigator.onLine;
+    badge.textContent = isOnline ? 'Online' : 'Offline';
+    badge.classList.toggle('online', isOnline);
+    badge.classList.toggle('offline', !isOnline);
+}
+
+async function updateMyPresence() {
+    const user = getCurrentUser();
+    if (!user?.email) return;
+
+    updateOwnOnlineBadge();
+
+    try {
+        const snap = await db.collection('users').where('email', '==', user.email).limit(1).get();
+        if (!snap.empty) {
+            await db.collection('users').doc(snap.docs[0].id).update({
+                lastActiveAt: Date.now(),
+                isOnline: navigator.onLine
+            });
+        }
+    } catch (e) {
+        console.warn('Không cập nhật được trạng thái online:', e);
+    }
+}
+
+function startPresenceTracking() {
+    updateMyPresence();
+    if (presenceInterval) clearInterval(presenceInterval);
+    presenceInterval = setInterval(updateMyPresence, 30000);
+}
+
+function stopPresenceTracking() {
+    if (presenceInterval) {
+        clearInterval(presenceInterval);
+        presenceInterval = null;
+    }
+}
+
+function getChatKey(emailA, emailB) {
+    return [emailA, emailB].map((s) => (s || '').toLowerCase()).sort().join('__');
+}
+
+function toggleChatPanel() {
+    const panel = document.getElementById('chat-panel');
+    panel?.classList.toggle('show');
+}
+
+function renderChatUsers(users) {
+    const list = document.getElementById('chat-users');
+    const me = getCurrentUser();
+    if (!list || !me?.email) return;
+
+    const others = users
+        .filter((u) => (u.email || '').toLowerCase() !== me.email.toLowerCase())
+        .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+    chatUsersCache = others;
+
+    list.innerHTML = others.map((u) => {
+        const online = getOnlineStateFromTimestamp(u.lastActiveAt) && !!u.isOnline;
+        const avatar = u.avatar || buildAvatarUrl(u.name || 'Bạn');
+        const email = (u.email || '').replace(/'/g, "\'");
+        return `<div class="chat-user-item ${online ? 'online' : ''}" onclick="openPrivateChatByEmail('${email}')">
+            <span class="dot"></span>
+            <img class="comment-avatar" src="${avatar}" alt="avatar">
+            <span>${u.name || u.email} • ${online ? 'Online' : 'Offline'}</span>
+        </div>`;
+    }).join('');
+}
+
+function openPrivateChatByEmail(email) {
+    selectedChatUser = chatUsersCache.find((u) => (u.email || '').toLowerCase() === (email || '').toLowerCase()) || null;
+    if (!selectedChatUser) return;
+
+    document.getElementById('chat-active').style.display = 'grid';
+    document.getElementById('chat-target-name').textContent = selectedChatUser.name || selectedChatUser.email;
+    loadPrivateMessages();
+}
+
+function initPrivateChatUsers() {
+    if (usersUnsubscribe) usersUnsubscribe();
+    usersUnsubscribe = db.collection('users').onSnapshot((snap) => {
+        const users = [];
+        snap.forEach((doc) => users.push(doc.data()));
+        renderChatUsers(users);
+    });
+}
+
+function loadPrivateMessages() {
+    const me = getCurrentUser();
+    if (!selectedChatUser || !me?.email) return;
+
+    const messagesBox = document.getElementById('chat-messages');
+    const key = getChatKey(me.email, selectedChatUser.email);
+
+    if (chatUnsubscribe) chatUnsubscribe();
+    chatUnsubscribe = db.collection('private_messages')
+        .where('chatKey', '==', key)
+        .orderBy('createdAt', 'asc')
+        .onSnapshot((snap) => {
+            if (!messagesBox) return;
+            let html = '';
+            snap.forEach((doc) => {
+                const data = doc.data();
+                const isMe = (data.senderEmail || '').toLowerCase() === me.email.toLowerCase();
+                html += `<div class="chat-bubble ${isMe ? 'me' : 'other'}">${data.text || ''}</div>`;
+            });
+            messagesBox.innerHTML = html || '<p style="color:#888">Chưa có tin nhắn nào.</p>';
+            messagesBox.scrollTop = messagesBox.scrollHeight;
+        });
+}
+
+async function sendPrivateMessage() {
+    const me = getCurrentUser();
+    const input = document.getElementById('chat-input');
+    const text = input?.value.trim();
+    if (!me?.email || !selectedChatUser?.email || !text) return;
+
+    try {
+        await db.collection('private_messages').add({
+            chatKey: getChatKey(me.email, selectedChatUser.email),
+            participants: [me.email.toLowerCase(), selectedChatUser.email.toLowerCase()],
+            senderEmail: me.email.toLowerCase(),
+            receiverEmail: selectedChatUser.email.toLowerCase(),
+            text,
+            createdAt: Date.now()
+        });
+        input.value = '';
+    } catch (e) {
+        console.error('Không gửi được tin nhắn riêng:', e);
+        alert('Gửi tin nhắn thất bại. Vui lòng thử lại.');
     }
 }
 
@@ -219,9 +369,24 @@ function enterMainSite() {
     createLeaves();
     loadTimeCapsuleMessages();
     updateCurrentUserDisplay();
+    startPresenceTracking();
+    initPrivateChatUsers();
 }
 
-function logoutUser() {
+async function logoutUser() {
+    await updateMyPresence().catch(() => {});
+    stopPresenceTracking();
+    if (usersUnsubscribe) { usersUnsubscribe(); usersUnsubscribe = null; }
+    if (chatUnsubscribe) { chatUnsubscribe(); chatUnsubscribe = null; }
+    const current = getCurrentUser();
+    if (current?.email) {
+        try {
+            const snap = await db.collection('users').where('email', '==', current.email).limit(1).get();
+            if (!snap.empty) {
+                await db.collection('users').doc(snap.docs[0].id).update({ isOnline: false, lastActiveAt: Date.now() });
+            }
+        } catch (e) {}
+    }
     localStorage.removeItem(SESSION_KEY);
     document.getElementById('main-content').style.display = 'none';
     document.getElementById('password-screen').style.display = 'flex';
@@ -1027,6 +1192,23 @@ window.addEventListener('DOMContentLoaded', () => {
     initPasswordToggles();
     updateLetterCountdowns();
     setInterval(updateLetterCountdowns, 1000);
+
+    const avatarInput = document.getElementById('profile-avatar');
+    avatarInput?.addEventListener('input', () => {
+        const preview = document.getElementById('profile-avatar-preview');
+        if (preview) preview.src = avatarInput.value.trim() || buildAvatarUrl('Avatar');
+    });
+
+    if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission().catch(() => {});
+    }
+
+    window.addEventListener('online', updateMyPresence);
+    window.addEventListener('offline', updateMyPresence);
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') updateMyPresence();
+    });
+    
     const user = getCurrentUser();
     if (user) {
         enterMainSite();
