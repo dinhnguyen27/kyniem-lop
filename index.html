@@ -171,16 +171,23 @@
             <strong>Trò chuyện riêng</strong>
             <button onclick="toggleChatPanel()">✕</button>
         </div>
-        <div class="chat-users" id="chat-users"></div>
-        <div class="chat-active" id="chat-active" style="display:none;">
+
+        <div class="chat-users-view" id="chat-users-view">
+            <div class="chat-users" id="chat-users"></div>
+        </div>
+
+        <div class="chat-conversation-view" id="chat-conversation-view">
             <div class="chat-active-header">
+                <button class="chat-back-btn" onclick="closePrivateChat()">←</button>
                 <span id="chat-target-name">Chọn người để chat</span>
             </div>
             <div class="chat-messages" id="chat-messages"></div>
             <div class="chat-input-row">
+                <button class="emoji-toggle-btn" onclick="toggleEmojiPicker()">😊</button>
                 <input id="chat-input" type="text" placeholder="Nhắn gì đó..." onkeypress="if(event.key==='Enter') sendPrivateMessage()">
                 <button onclick="sendPrivateMessage()">Gửi</button>
             </div>
+            <div id="emoji-picker" class="emoji-picker"></div>
         </div>
     </div>
 
