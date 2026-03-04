@@ -20,6 +20,57 @@ const ACCOUNTS_KEY = 'class_accounts';
 const SESSION_KEY = 'class_current_user';
 const IS_FILE_PROTOCOL = window.location.protocol === 'file:';
 
+
+function getFirebaseServerErrorKey(error) {
+    const raw = [
+        error?.customData?._tokenResponse?.error?.message,
+        error?.serverResponse,
+        error?.message
+    ].filter(Boolean).join(' | ');
+
+    const knownKeys = [
+        'OPERATION_NOT_ALLOWED',
+        'UNAUTHORIZED_DOMAIN',
+        'INVALID_CONTINUE_URI',
+        'EMAIL_EXISTS',
+        'TOO_MANY_ATTEMPTS_TRY_LATER',
+        'API_KEY_SERVICE_BLOCKED',
+        'INVALID_API_KEY',
+        'PROJECT_NOT_FOUND'
+    ];
+
+    for (const key of knownKeys) {
+        if (raw.includes(key)) return key;
+    }
+    return '';
+}
+
+function mapAuthErrorToMessage(error, fallbackMessage) {
+    const code = error?.code || '';
+    const key = getFirebaseServerErrorKey(error);
+
+    if (code === 'auth/email-already-in-use' || key === 'EMAIL_EXISTS') {
+        return 'Email này đã tồn tại trên Firebase Authentication. Hãy dùng Quên mật khẩu để đặt lại.';
+    }
+    if (code === 'auth/operation-not-allowed' || key === 'OPERATION_NOT_ALLOWED') {
+        return 'Firebase chưa bật Email/Password provider. Vào Authentication > Sign-in method để bật.';
+    }
+    if (code === 'auth/unauthorized-domain' || key === 'UNAUTHORIZED_DOMAIN' || key === 'INVALID_CONTINUE_URI') {
+        return 'Domain hiện tại chưa nằm trong Authorized domains của Firebase Auth.';
+    }
+    if (key === 'API_KEY_SERVICE_BLOCKED' || key === 'INVALID_API_KEY' || key === 'PROJECT_NOT_FOUND') {
+        return 'Firebase API key/project đang bị chặn hoặc sai cấu hình. Hãy kiểm tra API key restrictions và project config.';
+    }
+    if (code === 'auth/too-many-requests' || key === 'TOO_MANY_ATTEMPTS_TRY_LATER') {
+        return 'Bạn thao tác quá nhanh nên Firebase tạm chặn. Vui lòng thử lại sau vài phút.';
+    }
+    if (code === 'auth/internal-error') {
+        return 'Firebase trả về internal-error (thường do domain/provider/API key). Vui lòng kiểm tra cấu hình Firebase rồi thử lại.';
+    }
+
+    return `${fallbackMessage} (${code || key || 'unknown-error'}).`;
+}
+
 function getSavedAccounts() {
     return JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || '[]');
 }
@@ -141,13 +192,7 @@ async function registerAccount() {
         switchAuthTab('login');
     } catch (error) {
         console.error('Lỗi đăng ký Firebase:', error);
-        if (error?.code === 'auth/email-already-in-use') {
-            return showAuthMessage('Email này đã tồn tại trên Firebase Authentication. Hãy dùng Quên mật khẩu để đặt lại.');
-        }
-        if (error?.code === 'auth/unauthorized-domain') {
-            return showAuthMessage('Domain hiện tại chưa nằm trong Authorized domains của Firebase Auth.');
-        }
-        showAuthMessage(`Không thể đăng ký lúc này (${error?.code || 'unknown-error'}).`);
+        showAuthMessage(mapAuthErrorToMessage(error, 'Không thể đăng ký lúc này'));
     }
 }
 
@@ -615,14 +660,8 @@ async function sendPasswordResetCode() {
         if (error?.code === 'auth/user-not-found') {
             return showAuthMessage('Email này chưa có trên Firebase Authentication nên chưa thể gửi mã. Hãy liên hệ admin để bật tài khoản Auth.');
         }
-        if (error?.code === 'auth/unauthorized-domain' || error?.code === 'auth/invalid-continue-uri') {
-            return showAuthMessage('Domain hiện tại chưa nằm trong Authorized domains của Firebase Auth.');
-        }
-        if (error?.code === 'auth/internal-error') {
-            return showAuthMessage('Firebase đang trả về internal-error. Hãy kiểm tra Authorized domains, Email/Password provider và thử lại sau ít phút.');
-        }
         console.error('Lỗi gửi email đặt lại mật khẩu:', error);
-        showAuthMessage(`Không gửi được mã xác thực lúc này (${error?.code || 'unknown-error'}).`);
+        showAuthMessage(mapAuthErrorToMessage(error, 'Không gửi được mã xác thực lúc này'));
     }
 }
 
