@@ -26,9 +26,14 @@ let notifiedUnlockIds = new Set(JSON.parse(localStorage.getItem(UNLOCK_NOTIFY_KE
 const ONLINE_ACTIVE_WINDOW_MS = 120000;
 let presenceInterval = null;
 let usersUnsubscribe = null;
+let recentMessagesUnsubscribe = null;
 let chatUnsubscribe = null;
 let selectedChatUser = null;
 let chatUsersCache = [];
+let allChatUsers = [];
+let lastMessageAtByEmail = {};
+
+const CHAT_EMOJIS = ['😀','😁','😂','🤣','😊','😍','🥰','😘','😎','🤩','😢','😭','😡','👍','👏','🙏','🔥','🎉','💖','💬','🌸','🎓','🫶','✨'];
 
 
 function buildAvatarUrl(name = 'Thành viên lớp') {
@@ -169,18 +174,69 @@ function toggleChatPanel() {
     panel?.classList.toggle('show');
 }
 
+function closePrivateChat() {
+    const panel = document.getElementById('chat-panel');
+    panel?.classList.remove('in-conversation');
+    selectedChatUser = null;
+    if (chatUnsubscribe) {
+        chatUnsubscribe();
+        chatUnsubscribe = null;
+    }
+    const box = document.getElementById('chat-messages');
+    if (box) box.innerHTML = '';
+    document.getElementById('emoji-picker')?.classList.remove('show');
+}
+
+function sortChatUsersByLatest(users) {
+    return [...users].sort((a, b) => {
+        const aTs = Number(lastMessageAtByEmail[(a.email || '').toLowerCase()] || 0);
+        const bTs = Number(lastMessageAtByEmail[(b.email || '').toLowerCase()] || 0);
+        if (bTs !== aTs) return bTs - aTs;
+        return (a.name || '').localeCompare(b.name || '');
+    });
+}
+
+function initRecentMessagesRanking() {
+    const me = getCurrentUser();
+    if (!me?.email) return;
+
+    if (recentMessagesUnsubscribe) recentMessagesUnsubscribe();
+
+    recentMessagesUnsubscribe = db.collection('private_messages')
+        .where('participants', 'array-contains', me.email.toLowerCase())
+        .onSnapshot((snap) => {
+            const latest = {};
+            snap.forEach((doc) => {
+                const data = doc.data();
+                const sender = (data.senderEmail || '').toLowerCase();
+                const receiver = (data.receiverEmail || '').toLowerCase();
+                const other = sender === me.email.toLowerCase() ? receiver : sender;
+                if (!other) return;
+
+                const ts = Number(data.createdAt || 0);
+                if (!latest[other] || ts > latest[other]) latest[other] = ts;
+            });
+
+            lastMessageAtByEmail = latest;
+            if (allChatUsers.length) renderChatUsers(allChatUsers);
+        }, (error) => {
+            console.warn('Không tải được xếp hạng tin nhắn mới nhất:', error);
+        });
+}
+
 function renderChatUsers(users) {
     const list = document.getElementById('chat-users');
     const me = getCurrentUser();
     if (!list || !me?.email) return;
 
     const others = users
-        .filter((u) => (u.email || '').toLowerCase() !== me.email.toLowerCase())
-        .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+        .filter((u) => (u.email || '').toLowerCase() !== me.email.toLowerCase());
 
-    chatUsersCache = others;
+    const sortedUsers = sortChatUsersByLatest(others);
 
-    list.innerHTML = others.map((u) => {
+    chatUsersCache = sortedUsers;
+
+    list.innerHTML = sortedUsers.map((u) => {
         const online = getOnlineStateFromTimestamp(u.lastActiveAt) && !!u.isOnline;
         const avatar = u.avatar || buildAvatarUrl(u.name || 'Bạn');
         const email = (u.email || '').replace(/'/g, "\'");
@@ -196,16 +252,21 @@ function openPrivateChatByEmail(email) {
     selectedChatUser = chatUsersCache.find((u) => (u.email || '').toLowerCase() === (email || '').toLowerCase()) || null;
     if (!selectedChatUser) return;
 
-    document.getElementById('chat-active').style.display = 'grid';
+    const panel = document.getElementById('chat-panel');
+    panel?.classList.add('in-conversation');
+    document.getElementById('emoji-picker')?.classList.remove('show');
     document.getElementById('chat-target-name').textContent = selectedChatUser.name || selectedChatUser.email;
     loadPrivateMessages();
 }
 
 function initPrivateChatUsers() {
+    initRecentMessagesRanking();
+
     if (usersUnsubscribe) usersUnsubscribe();
     usersUnsubscribe = db.collection('users').onSnapshot((snap) => {
         const users = [];
         snap.forEach((doc) => users.push(doc.data()));
+        allChatUsers = users;
         renderChatUsers(users);
     });
 }
@@ -218,19 +279,33 @@ function loadPrivateMessages() {
     const key = getChatKey(me.email, selectedChatUser.email);
 
     if (chatUnsubscribe) chatUnsubscribe();
+
+    const renderMessages = (snap) => {
+        if (!messagesBox) return;
+        const docs = [];
+        snap.forEach((doc) => docs.push(doc.data()));
+        docs.sort((a, b) => Number(a.createdAt || 0) - Number(b.createdAt || 0));
+
+        let html = '';
+        docs.forEach((data) => {
+            const isMe = (data.senderEmail || '').toLowerCase() === me.email.toLowerCase();
+            const safeText = escapeHtml(data.text || '');
+            const senderName = escapeHtml(data.senderName || (isMe ? (me.name || 'Bạn') : (selectedChatUser?.name || 'Bạn ấy')));
+            const timeText = formatChatTime(data.createdAt);
+            html += `<div class="chat-bubble ${isMe ? 'me' : 'other'}">${safeText}<span class="meta">${senderName} • ${timeText}</span></div>`;
+        });
+
+        messagesBox.innerHTML = html || '<p style="color:#888">Chưa có tin nhắn nào.</p>';
+        messagesBox.scrollTop = messagesBox.scrollHeight;
+    };
+
     chatUnsubscribe = db.collection('private_messages')
         .where('chatKey', '==', key)
-        .orderBy('createdAt', 'asc')
-        .onSnapshot((snap) => {
-            if (!messagesBox) return;
-            let html = '';
-            snap.forEach((doc) => {
-                const data = doc.data();
-                const isMe = (data.senderEmail || '').toLowerCase() === me.email.toLowerCase();
-                html += `<div class="chat-bubble ${isMe ? 'me' : 'other'}">${data.text || ''}</div>`;
-            });
-            messagesBox.innerHTML = html || '<p style="color:#888">Chưa có tin nhắn nào.</p>';
-            messagesBox.scrollTop = messagesBox.scrollHeight;
+        .onSnapshot(renderMessages, (error) => {
+            console.error('Lỗi tải tin nhắn riêng:', error);
+            if (messagesBox) {
+                messagesBox.innerHTML = '<p style="color:#d33">Không tải được tin nhắn. Kiểm tra Firestore rules/index.</p>';
+            }
         });
 }
 
@@ -245,15 +320,58 @@ async function sendPrivateMessage() {
             chatKey: getChatKey(me.email, selectedChatUser.email),
             participants: [me.email.toLowerCase(), selectedChatUser.email.toLowerCase()],
             senderEmail: me.email.toLowerCase(),
+            senderName: me.name || me.email,
+            senderAvatar: me.avatar || buildAvatarUrl(me.name || me.email),
             receiverEmail: selectedChatUser.email.toLowerCase(),
             text,
             createdAt: Date.now()
         });
+        const otherEmail = selectedChatUser.email.toLowerCase();
+        lastMessageAtByEmail[otherEmail] = Date.now();
+        if (allChatUsers.length) renderChatUsers(allChatUsers);
+
         input.value = '';
+        document.getElementById('emoji-picker')?.classList.remove('show');
     } catch (e) {
         console.error('Không gửi được tin nhắn riêng:', e);
         alert('Gửi tin nhắn thất bại. Vui lòng thử lại.');
     }
+}
+
+function escapeHtml(value = '') {
+    return value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function formatChatTime(timestamp) {
+    if (!timestamp) return '';
+    const d = new Date(Number(timestamp));
+    return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+}
+
+function initEmojiPicker() {
+    const picker = document.getElementById('emoji-picker');
+    if (!picker) return;
+
+    picker.innerHTML = CHAT_EMOJIS
+        .map((emoji) => `<button class="emoji-item" onclick="appendEmoji('${emoji}')">${emoji}</button>`)
+        .join('');
+}
+
+function toggleEmojiPicker() {
+    const picker = document.getElementById('emoji-picker');
+    picker?.classList.toggle('show');
+}
+
+function appendEmoji(emoji) {
+    const input = document.getElementById('chat-input');
+    if (!input) return;
+    input.value += emoji;
+    input.focus();
 }
 
 function showAuthMessage(message, isError = true) {
@@ -377,6 +495,7 @@ async function logoutUser() {
     await updateMyPresence().catch(() => {});
     stopPresenceTracking();
     if (usersUnsubscribe) { usersUnsubscribe(); usersUnsubscribe = null; }
+    if (recentMessagesUnsubscribe) { recentMessagesUnsubscribe(); recentMessagesUnsubscribe = null; }
     if (chatUnsubscribe) { chatUnsubscribe(); chatUnsubscribe = null; }
     const current = getCurrentUser();
     if (current?.email) {
@@ -772,7 +891,7 @@ async function checkPassword() {
 
         if (!account) return showAuthMessage('Sai email/số điện thoại hoặc mật khẩu. Vui lòng thử lại.');   
 
-        const sessionUser = { name: account.name, phone: account.phone, email: account.email };
+        const sessionUser = normalizeUserAvatar({ name: account.name, phone: account.phone, email: account.email, avatar: account.avatar });
         localStorage.setItem(SESSION_KEY, JSON.stringify(sessionUser));
         localStorage.setItem('class_user_name', account.name);
         showAuthMessage('Đăng nhập thành công!', false);
@@ -1192,6 +1311,8 @@ window.addEventListener('DOMContentLoaded', () => {
     initPasswordToggles();
     updateLetterCountdowns();
     setInterval(updateLetterCountdowns, 1000);
+
+    initEmojiPicker();
 
     const avatarInput = document.getElementById('profile-avatar');
     avatarInput?.addEventListener('input', () => {
