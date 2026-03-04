@@ -89,6 +89,20 @@
     margin-left: 0;
 }
 
+.password-toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+    font-size: 0.9rem;
+    color: #f4f4f4;
+}
+
+.password-toggle-row input {
+    width: auto;
+    margin-top: 0;
+}
+
 .user-chip {
     margin-top: 14px;
     display: inline-flex;
@@ -98,6 +112,15 @@
     color: white;
     padding: 8px 14px;
     border-radius: 30px;
+}
+
+.user-avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid rgba(255,255,255,0.7);
+    background: rgba(255,255,255,0.4);
 }
 
 .user-chip button {
@@ -425,10 +448,26 @@ video[poster] {
 }
 
 .each-comment {
-    margin: 5px 0;
-    padding: 5px 8px;
+    margin: 6px 0;
+    padding: 6px 8px;
     background: #f8f9fa;
     border-radius: 8px;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.comment-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 1px solid #ddd;
+}
+
+.comment-text {
+    flex: 1;
+    line-height: 1.4;
 }
 
 .comment-input-group {
@@ -1091,4 +1130,61 @@ video[poster] {
 
 #music-toast.show {
     top: 30px; /* Hiện xuống */
+}
+
+
+.profile-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    z-index: 3000;
+    align-items: center;
+    justify-content: center;
+}
+
+.profile-modal-content {
+    width: min(460px, 92vw);
+    background: #fff;
+    border-radius: 16px;
+    padding: 20px;
+    position: relative;
+}
+
+.close-profile {
+    position: absolute;
+    right: 14px;
+    top: 8px;
+    font-size: 28px;
+    cursor: pointer;
+}
+
+.profile-form {
+    display: grid;
+    gap: 10px;
+}
+
+.profile-form input {
+    padding: 10px 12px;
+    border: 1px solid #ddd;
+    border-radius: 10px;
+}
+
+.profile-form button {
+    border: none;
+    padding: 10px 14px;
+    border-radius: 10px;
+    background: #ff7e5f;
+    color: #fff;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.profile-avatar-preview {
+    width: 84px;
+    height: 84px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid #ffd2c8;
+    margin: 0 auto 6px;
 }
