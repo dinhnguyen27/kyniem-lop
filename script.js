@@ -18,6 +18,20 @@ const db = firebase.firestore();
 
 const ACCOUNTS_KEY = 'class_accounts';
 const SESSION_KEY = 'class_current_user';
+const UNLOCK_NOTIFY_KEY = 'class_capsule_notified_unlocks';
+
+let unlockWatcherInitialized = false;
+let notifiedUnlockIds = new Set(JSON.parse(localStorage.getItem(UNLOCK_NOTIFY_KEY) || '[]'));
+
+
+function buildAvatarUrl(name = 'Thành viên lớp') {
+    return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=ff7e5f&color=fff`;
+}
+
+function normalizeUserAvatar(user) {
+    if (!user) return null;
+    return { ...user, avatar: user.avatar || buildAvatarUrl(user.name) };
+}
 
 function getSavedAccounts() {
     return JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || '[]');
@@ -32,15 +46,63 @@ function getCurrentUser() {
 }
 
 function updateCurrentUserDisplay() {
-    const user = getCurrentUser();
+    const user = normalizeUserAvatar(getCurrentUser());
     const chip = document.getElementById('current-user-display');
+    const avatar = document.getElementById('current-user-avatar');
+
     if (chip) {
         chip.innerText = user ? `${user.name} • ${user.phone} • ${user.email}` : 'Bạn chưa đăng nhập';
+    }
+
+    if (avatar) {
+        avatar.src = user?.avatar || buildAvatarUrl('Khách');
+        avatar.style.display = 'block';
     }
 
     const senderInput = document.getElementById('capsule-sender');
     if (senderInput && user) {
         senderInput.value = user.name;
+    }
+}
+
+function saveNotifiedUnlockIds() {
+    localStorage.setItem(UNLOCK_NOTIFY_KEY, JSON.stringify([...notifiedUnlockIds]));
+}
+
+function showSystemToast(message) {
+    const toast = document.getElementById('music-toast');
+    if (!toast) return;
+
+    toast.innerHTML = `🔔 ${message}`;
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 5000);
+}
+
+function notifyUnlockedMessages(allMessages, today) {
+    const unlockedMessages = allMessages.filter((m) => today >= m.unlockDate);
+
+    if (!unlockWatcherInitialized) {
+        unlockedMessages.forEach((m) => notifiedUnlockIds.add(m.id));
+        saveNotifiedUnlockIds();
+        unlockWatcherInitialized = true;
+        return;
+    }
+
+    const newlyUnlocked = unlockedMessages.filter((m) => !notifiedUnlockIds.has(m.id));
+    if (newlyUnlocked.length === 0) return;
+
+    newlyUnlocked.forEach((m) => notifiedUnlockIds.add(m.id));
+    saveNotifiedUnlockIds();
+
+    const latest = newlyUnlocked[0];
+    const message = newlyUnlocked.length === 1
+        ? `Thư của ${latest.sender || 'một bạn'} đã mở khóa!`
+        : `Có ${newlyUnlocked.length} bức thư vừa mở khóa!`;
+
+    showSystemToast(message);
+
+    if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification('Hộp thư thời gian', { body: message });
     }
 }
 
@@ -71,6 +133,21 @@ function switchAuthTab(tab) {
     document.getElementById('auth-success').style.display = 'none';
 }
 
+function bindPasswordToggle(toggleId, passwordId) {
+    const toggle = document.getElementById(toggleId);
+    const passwordInput = document.getElementById(passwordId);
+    if (!toggle || !passwordInput) return;
+
+    toggle.addEventListener('change', () => {
+        passwordInput.type = toggle.checked ? 'text' : 'password';
+    });
+}   
+
+function initPasswordToggles() {
+    bindPasswordToggle('toggle-login-password', 'login-password');
+    bindPasswordToggle('toggle-register-password', 'register-password');
+}
+
 async function registerAccount() {
     const name = document.getElementById('register-name').value.trim();
     const phone = document.getElementById('register-phone').value.trim();
@@ -92,17 +169,20 @@ async function registerAccount() {
             return showAuthMessage('Email hoặc số điện thoại đã được đăng ký.');
         }
 
+        const avatar = buildAvatarUrl(name);    
+
         await db.collection('users').add({
             name,
             phone,
             email,
+            avatar, 
             password,
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
 
         const localAccounts = getSavedAccounts();
         if (!localAccounts.some((a) => a.email === email)) {
-            localAccounts.push({ name, phone, email, password });
+            localAccounts.push({ name, phone, email, avatar, password });
             saveAccounts(localAccounts);
         }
 
@@ -350,9 +430,15 @@ function loadGallery() {
             const heartUsers = data.heartUsers || [];
             const hahaUsers = data.hahaUsers || [];
             const comments = data.comments || [];
-            const commentHtml = comments.map(c => `
-                <p class="each-comment"><b>${c.user}:</b> ${c.text}</p>
-            `).join('');
+            const commentHtml = comments.map(c => {
+                const avatar = c.avatar || buildAvatarUrl(c.user || 'Thành viên');
+                return `
+                    <div class="each-comment">
+                        <img class="comment-avatar" src="${avatar}" alt="avatar">
+                        <div class="comment-text"><b>${c.user}:</b> ${c.text}</div>
+                    </div>
+                `;
+            }).join('');
 
             // Tạo danh sách tên để hiện khi rê chuột vào (Tooltip)
             const heartListHtml = heartUsers.length > 0 ? heartUsers.join("<br>") : "Chưa có ai thả tim";
@@ -418,12 +504,15 @@ async function addComment(postId) {
 
     // Lấy tên người dùng trước khi gửi
     const userName = getUserName();
+    const currentUser = normalizeUserAvatar(getCurrentUser());
+    const avatar = currentUser?.avatar || buildAvatarUrl(userName);
 
     const postRef = db.collection("posts").doc(postId);
     try {
         await postRef.update({
             comments: firebase.firestore.FieldValue.arrayUnion({
                 user: userName, // Sử dụng tên vừa lấy được
+                avatar: avatar,
                 text: text,
                 time: Date.now()
             })
@@ -485,26 +574,38 @@ function startCountdown() {
 
 // 5. Kiểm tra mật khẩu và khởi động web
 async function checkPassword() {
-    const email = document.getElementById('login-email').value.trim().toLowerCase();
+    const loginIdentifier = document.getElementById('login-identifier').value.trim();
+    const normalizedIdentifier = loginIdentifier.toLowerCase();
     const password = document.getElementById('login-password').value;
-    if (!email || !password) return showAuthMessage('Vui lòng nhập email và mật khẩu để đăng nhập.');
+    if (!loginIdentifier || !password) return showAuthMessage('Vui lòng nhập email hoặc số điện thoại cùng mật khẩu để đăng nhập.');
 
     try {
-        const userSnap = await db.collection('users')
-            .where('email', '==', email)
-            .where('password', '==', password)
-            .limit(1)
-            .get();
+        const [emailSnap, phoneSnap] = await Promise.all([
+            db.collection('users')
+                .where('email', '==', normalizedIdentifier)
+                .where('password', '==', password)
+                .limit(1)
+                .get(),
+            db.collection('users')
+                .where('phone', '==', loginIdentifier)
+                .where('password', '==', password)
+                .limit(1)
+                .get()
+        ]);
 
         let account = null;
-        if (!userSnap.empty) {
-            account = userSnap.docs[0].data();
+        if (!emailSnap.empty) {
+            account = emailSnap.docs[0].data();
+        } else if (!phoneSnap.empty) {
+            account = phoneSnap.docs[0].data();
         } else {
             const accounts = getSavedAccounts();
-            account = accounts.find((a) => a.email === email && a.password === password) || null;
+            account = accounts.find((a) =>
+                (a.email === normalizedIdentifier || a.phone === loginIdentifier) && a.password === password
+            ) || null;
         }
 
-        if (!account) return showAuthMessage('Sai email hoặc mật khẩu. Vui lòng thử lại.');
+        if (!account) return showAuthMessage('Sai email/số điện thoại hoặc mật khẩu. Vui lòng thử lại.');   
 
         const sessionUser = { name: account.name, phone: account.phone, email: account.email };
         localStorage.setItem(SESSION_KEY, JSON.stringify(sessionUser));
@@ -612,30 +713,59 @@ document.getElementById('login-password')?.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') checkPassword();
 });
 
-function changeMyName() {
-    const user = getCurrentUser();
-    const newName = prompt('Nhập tên mới của bạn:', user?.name || '');
-    if (!newName || newName.trim() === '') return;
+function openProfileModal() {
+    const user = normalizeUserAvatar(getCurrentUser());
+    if (!user) return alert('Bạn cần đăng nhập để xem hồ sơ.');
 
-    const normalizedName = newName.trim();
-    localStorage.setItem('class_user_name', normalizedName);
+    document.getElementById('profile-name').value = user.name || '';
+    document.getElementById('profile-phone').value = user.phone || '';
+    document.getElementById('profile-email').value = user.email || '';
+    document.getElementById('profile-avatar').value = user.avatar || buildAvatarUrl(user.name);
+    document.getElementById('profile-avatar-preview').src = user.avatar || buildAvatarUrl(user.name);
+    document.getElementById('profile-modal').style.display = 'flex';
+}
 
-    if (!user) {
-        alert('Đã đổi tên thành: ' + normalizedName);
-        return;
+function closeProfileModal() {
+    const modal = document.getElementById('profile-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+    async function saveProfile() {
+    const user = normalizeUserAvatar(getCurrentUser());
+    if (!user) return;
+
+    const name = document.getElementById('profile-name').value.trim();
+    const phone = document.getElementById('profile-phone').value.trim();
+    const avatarInput = document.getElementById('profile-avatar').value.trim();
+    const avatar = avatarInput || buildAvatarUrl(name || user.name);
+
+    if (!name || !phone) return alert('Vui lòng nhập đầy đủ họ tên và số điện thoại.');
+
+    try {
+        const snap = await db.collection('users').where('email', '==', user.email).limit(1).get();
+        if (!snap.empty) {
+            await db.collection('users').doc(snap.docs[0].id).update({ name, phone, avatar });
+        }
+
+        const accounts = getSavedAccounts();
+        const idx = accounts.findIndex((a) => a.email === user.email);
+        if (idx !== -1) {
+            accounts[idx].name = name;
+            accounts[idx].phone = phone;
+            accounts[idx].avatar = avatar;
+            saveAccounts(accounts);
+        }
+
+        const updated = { ...user, name, phone, avatar };
+        localStorage.setItem(SESSION_KEY, JSON.stringify(updated));
+        localStorage.setItem('class_user_name', name);
+        updateCurrentUserDisplay();
+        closeProfileModal();
+        alert('Đã cập nhật hồ sơ thành công!');
+    } catch (error) {
+        console.error('Lỗi cập nhật hồ sơ:', error);
+        alert('Không thể cập nhật hồ sơ. Vui lòng thử lại.');
     }
-
-    const accounts = getSavedAccounts();
-    const index = accounts.findIndex((a) => a.email === user.email);
-    if (index !== -1) {
-        accounts[index].name = normalizedName;
-        saveAccounts(accounts);
-    }
-
-    const updatedUser = { ...user, name: normalizedName };
-    localStorage.setItem(SESSION_KEY, JSON.stringify(updatedUser));
-    updateCurrentUserDisplay();
-    alert('Đã cập nhật tên thành: ' + normalizedName);
 }
 
 // Hàm xử lý thả cảm xúc (Lưu danh sách tên)
@@ -730,6 +860,8 @@ function loadTimeCapsuleMessages() {
             allMessages.push({ id: doc.id, ...doc.data() });
         });
 
+        notifyUnlockedMessages(allMessages, today);
+
         // Sắp xếp: Thư đã mở (unlocked) lên đầu
         allMessages.sort((a, b) => {
             const isALocked = today < a.unlockDate;
@@ -780,6 +912,31 @@ function loadTimeCapsuleMessages() {
         if (loadMoreBtn) {
             loadMoreBtn.style.display = (allMessages.length > limitCount) ? "inline-block" : "none";
         }
+
+        updateLetterCountdowns();
+    });
+}
+
+function formatUnlockCountdown(unlockDate) {
+    const unlockTime = new Date(`${unlockDate}T00:00:00`).getTime();
+    const now = Date.now();
+    const distance = unlockTime - now;
+
+    if (distance <= 0) return 'Có thể mở thư rồi 🎉';
+
+    const days = Math.floor(distance / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+
+    return `${days} ngày ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+}
+
+function updateLetterCountdowns() {
+    document.querySelectorAll('.letter-unlock-countdown').forEach((el) => {
+        const unlockDate = el.dataset.unlockDate;
+        if (!unlockDate) return;
+        el.innerText = formatUnlockCountdown(unlockDate);
     });
 }
 
@@ -800,6 +957,12 @@ function createCardMarkup(data, isLocked) {
         </div>
         <div class="card-body">
             <p class="msg-text">${isLocked ? 'Thư đang bị khóa bí mật...' : data.message}</p>
+        ${isLocked ? `
+                <div class="letter-timer-box">
+                    <div class="timer-label">Mở sau:</div>
+                    <div class="timer-countdown-text letter-unlock-countdown" data-unlock-date="${data.unlockDate}"></div>
+                </div>
+            ` : ''}
         </div>
     `;
     return card;
@@ -824,11 +987,13 @@ function openLetter(sender, date, message) {
 function closeLetter() {
     document.getElementById('letter-modal').style.display = 'none';
 }
-
+    
 // Đóng khi nhấn ra ngoài vùng thư
 window.onclick = function(event) {
     const modal = document.getElementById('letter-modal');
+    const profileModal = document.getElementById('profile-modal');
     if (event.target == modal) closeLetter();
+    if (event.target == profileModal) closeProfileModal();
 }
 
 
@@ -859,6 +1024,9 @@ window.addEventListener('click', function(e) {
 
 
 window.addEventListener('DOMContentLoaded', () => {
+    initPasswordToggles();
+    updateLetterCountdowns();
+    setInterval(updateLetterCountdowns, 1000);
     const user = getCurrentUser();
     if (user) {
         enterMainSite();
