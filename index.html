@@ -57,8 +57,9 @@
             </div>
 
             <div id="auth-login" class="auth-panel active">
-                <input type="email" id="login-email" placeholder="Email của bạn">
+                <input type="text" id="login-identifier" placeholder="Email hoặc số điện thoại">
                 <input type="password" id="login-password" placeholder="Mật khẩu">
+                <label class="password-toggle-row"><input type="checkbox" id="toggle-login-password"> Hiện mật khẩu</label>
                 <button onclick="checkPassword()">Đăng nhập vào web</button>
             </div>
 
@@ -67,6 +68,7 @@
                 <input type="tel" id="register-phone" placeholder="Số điện thoại">
                 <input type="email" id="register-email" placeholder="Email">
                 <input type="password" id="register-password" placeholder="Mật khẩu (ít nhất 6 ký tự)">
+                <label class="password-toggle-row"><input type="checkbox" id="toggle-register-password"> Hiện mật khẩu</label>
                 <button onclick="registerAccount()">Tạo tài khoản</button>
             </div>
 
@@ -80,7 +82,9 @@
             <h1>Hành Trình Thanh Xuân</h1>
             <p>Nơi lưu giữ những mảnh ghép thời học sinh</p>
             <div class="user-chip">
+                <img id="current-user-avatar" class="user-avatar" src="" alt="avatar">
                 <span id="current-user-display">Bạn chưa đăng nhập</span>
+                <button onclick="openProfileModal()">Hồ sơ</button>
                 <button onclick="logoutUser()">Đăng xuất</button>
             </div>
         </header>
@@ -154,16 +158,25 @@
             </div>
 
             
-</div>
+    </div>
 
-        <div id="leaf-container"></div>
-        <div style="text-align: center; margin-bottom: 20px;">
-            <small style="color: #666; cursor: pointer; text-decoration: underline;" 
-                onclick="changeMyName()">
-                Đổi tên bình luận
-            </small>
-        </div>
+        <div id="leaf-container"></div>     
         
+    </div>
+
+    <div id="profile-modal" class="profile-modal">
+        <div class="profile-modal-content">
+            <span class="close-profile" onclick="closeProfileModal()">&times;</span>
+            <h3>Hồ sơ cá nhân</h3>
+            <div class="profile-form">
+                <img id="profile-avatar-preview" class="profile-avatar-preview" src="" alt="avatar preview">
+                <input type="text" id="profile-avatar" placeholder="Link avatar (https://...)" />
+                <input type="text" id="profile-name" placeholder="Họ và tên" />
+                <input type="tel" id="profile-phone" placeholder="Số điện thoại" />
+                <input type="email" id="profile-email" placeholder="Email" readonly />
+                <button onclick="saveProfile()">Lưu thay đổi</button>
+            </div>
+        </div>
     </div>
 
     <div id="lightbox" class="lightbox">
