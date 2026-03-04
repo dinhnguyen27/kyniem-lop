@@ -89,6 +89,21 @@
     margin-left: 0;
 }
 
+.lock-box .auth-panel .link-like-btn {
+    margin-top: 10px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    color: #fff3b0;
+    text-decoration: underline;
+    font-weight: 600;
+}
+
+.lock-box .auth-panel .link-like-btn:hover {
+    transform: none;
+    color: #ffffff;
+}
+
 .user-chip {
     margin-top: 14px;
     display: inline-flex;
