@@ -1524,3 +1524,53 @@ video[poster] {
 .chat-users::-webkit-scrollbar-track {
     background: #fff3ef;
 }
+
+
+.chat-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.chat-unread-badge {
+    min-width: 20px;
+    height: 20px;
+    border-radius: 999px;
+    background: #ff2d55;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 0 6px;
+    align-items: center;
+    justify-content: center;
+}
+
+.chat-user-item {
+    position: relative;
+}
+
+.chat-user-label {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.chat-user-unread {
+    display: none;
+    min-width: 20px;
+    height: 20px;
+    border-radius: 999px;
+    background: #ff2d55;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 0 6px;
+    align-items: center;
+    justify-content: center;
+}
+
+.chat-user-unread.show {
+    display: inline-flex;
+}
