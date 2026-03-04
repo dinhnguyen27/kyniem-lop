@@ -14,7 +14,6 @@ if (!firebase.apps.length) {
     firebase.initializeApp(firebaseConfig);
 }
 const db = firebase.firestore();
-const auth = firebase.auth();
 
 
 const ACCOUNTS_KEY = 'class_accounts';
@@ -120,22 +119,6 @@ async function registerAccount() {
     }
 }
 
-function resetPassword() {
-    const email = document.getElementById("login-email").value;
-
-    if (!email) {
-        alert("Vui lòng nhập email trước!");
-        return;
-    }
-
-    auth.sendPasswordResetEmail(email)
-        .then(() => {
-            alert("Đã gửi email đặt lại mật khẩu. Kiểm tra hộp thư nhé!");
-        })
-        .catch((error) => {
-            alert("Lỗi: " + error.message);
-        });
-}
 function enterMainSite() {
     document.getElementById('password-screen').style.display = 'none';
     document.getElementById('main-content').style.display = 'block';
