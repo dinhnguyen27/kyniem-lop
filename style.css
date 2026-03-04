@@ -1341,3 +1341,186 @@ video[poster] {
     border: 3px solid #ffd2c8;
     margin: 0 auto 6px;
 }
+
+
+.chat-panel {
+    grid-template-rows: auto 1fr;
+    background: linear-gradient(180deg, #fff 0%, #fff7f3 100%);
+}
+
+.chat-users-view,
+.chat-conversation-view {
+    position: relative;
+    height: 100%;
+}
+
+.chat-users-view {
+    display: block;
+}
+
+.chat-conversation-view {
+    display: none;
+    grid-template-rows: auto 1fr auto;
+    position: absolute;
+    inset: 48px 0 0 0;
+    background: #fff;
+    z-index: 2;
+}
+
+.chat-panel.in-conversation .chat-users-view {
+    display: none;
+}
+
+.chat-panel.in-conversation .chat-conversation-view {
+    display: grid;
+}
+
+.chat-users {
+    max-height: 100%;
+    border-bottom: none;
+    padding: 6px;
+}
+
+.chat-user-item {
+    border-radius: 12px;
+    margin-bottom: 6px;
+    background: rgba(255,255,255,.7);
+    border: 1px solid #f1ecea;
+}
+
+.chat-active-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px;
+    background: #fff;
+}
+
+.chat-back-btn {
+    border: none;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: #ffe3d8;
+    cursor: pointer;
+    font-weight: 700;
+}
+
+.chat-messages {
+    background: linear-gradient(180deg, #fafafa 0%, #f3f8ff 100%);
+}
+
+.chat-bubble {
+    box-shadow: 0 2px 6px rgba(0,0,0,.08);
+}
+
+
+.chat-bubble .meta {
+    display: block;
+    margin-top: 3px;
+    font-size: 11px;
+    opacity: .75;
+}
+
+.emoji-toggle-btn {
+    border: none;
+    background: #ffe7df;
+    border-radius: 50%;
+    width: 34px;
+    height: 34px;
+    cursor: pointer;
+    font-size: 16px;
+}
+
+.emoji-picker {
+    display: none;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 6px;
+    padding: 8px 10px 10px;
+    border-top: 1px solid #eee;
+    background: #fff;
+    max-height: 120px;
+    overflow-y: auto;
+}
+
+.emoji-picker.show {
+    display: grid;
+}
+
+.emoji-item {
+    border: none;
+    background: #f7f7f7;
+    border-radius: 8px;
+    padding: 4px;
+    cursor: pointer;
+    font-size: 18px;
+}
+
+.emoji-item:hover {
+    background: #ffe7df;
+}
+
+
+/* Fix hiển thị khung nhắn tin khi bật emoji */
+.chat-panel.in-conversation .chat-conversation-view {
+    display: flex;
+    flex-direction: column;
+}
+
+.chat-conversation-view {
+    position: absolute;
+    top: 48px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: auto;
+}
+
+.chat-messages {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding-bottom: 12px;
+}
+
+.chat-input-row {
+    flex-shrink: 0;
+}
+
+.emoji-picker {
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    bottom: 64px;
+    border: 1px solid #eee;
+    border-radius: 12px;
+    box-shadow: 0 10px 24px rgba(0,0,0,.12);
+    z-index: 5;
+}
+
+
+/* Danh sách online/offline có thể cuộn rõ ràng */
+.chat-users-view {
+    height: calc(100% - 0px);
+    overflow: hidden;
+}
+
+.chat-users {
+    height: 100%;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #ffb7a3 #fff3ef;
+}
+
+.chat-users::-webkit-scrollbar {
+    width: 8px;
+}
+
+.chat-users::-webkit-scrollbar-thumb {
+    background: #ffb7a3;
+    border-radius: 999px;
+}
+
+.chat-users::-webkit-scrollbar-track {
+    background: #fff3ef;
+}
