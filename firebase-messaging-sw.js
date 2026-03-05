@@ -2,7 +2,7 @@ importScripts('https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js');
 importScripts('https://www.gstatic.com/firebasejs/8.10.1/firebase-messaging.js');
 
 firebase.initializeApp({
-  apiKey: 'AIzaSyA1LkOgOfvmM49o4G4B8ZgoMglAPjNdD5w',
+  apiKey: 'AIzaSyA1lkOgOfvmM49o4G4B8ZgoMglAPjNdD5w',
   authDomain: 'kyniemlop-d3404.firebaseapp.com',
   projectId: 'kyniemlop-d3404',
   storageBucket: 'kyniemlop-d3404.firebasestorage.app',
@@ -22,4 +22,5 @@ messaging.setBackgroundMessageHandler((payload) => {
     icon: 'https://www.gstatic.com/mobilesdk/160503_mobilesdk/logo/2x/firebase_28dp.png',
     data: payload?.data || {}
   });
+
 });
