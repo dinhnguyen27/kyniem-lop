@@ -47,6 +47,31 @@ let swRegistration = null;
 
 let fcmSupportCache = null;
 
+function getSiteBasePath() {
+    const pathname = window.location.pathname || '/';
+    if (pathname.endsWith('.html')) {
+        return pathname.slice(0, pathname.lastIndexOf('/') + 1) || '/';
+    }
+    return pathname.endsWith('/') ? pathname : `${pathname}/`;
+}
+
+function getPushUnsupportedReason() {
+    const ua = navigator.userAgent || '';
+    const isIOS = /iPhone|iPad|iPod/i.test(ua);
+    const isSafari = /^((?!chrome|crios|android).)*safari/i.test(ua);
+    const isStandalone = window.matchMedia?.('(display-mode: standalone)')?.matches || window.navigator.standalone === true;
+
+    if (isIOS && isSafari && !isStandalone) {
+        return 'Safari iPhone chỉ hỗ trợ thông báo đẩy khi web được thêm vào Màn hình chính (Add to Home Screen).';
+    }
+
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+        return 'Trình duyệt hiện tại chưa hỗ trợ đầy đủ Service Worker/Push API.';
+    }
+
+    return 'Thiết bị/trình duyệt chưa hỗ trợ Firebase Cloud Messaging.';
+}
+
 async function isFCMSupported() {
     if (fcmSupportCache !== null) return fcmSupportCache;
 
@@ -68,6 +93,27 @@ async function isFCMSupported() {
     return fcmSupportCache;
 }
 
+async function registerMessagingServiceWorker() {
+    if (!('serviceWorker' in navigator)) return null;
+
+    const basePath = getSiteBasePath();
+    const candidates = basePath === '/'
+        ? ['/firebase-messaging-sw.js']
+        : [`${basePath}firebase-messaging-sw.js`, '/firebase-messaging-sw.js'];
+
+    for (const swUrl of candidates) {
+        try {
+            const registration = await navigator.serviceWorker.register(swUrl, { scope: basePath });
+            console.info(`FCM Service Worker đã đăng ký: ${swUrl}`);
+            return registration;
+        } catch (error) {
+            console.warn(`Không đăng ký được SW tại ${swUrl}:`, error);
+        }
+    }
+
+    return null;
+}
+
 async function setupFirebaseMessaging() {
     if (!(await isFCMSupported())) return;
     if (messaging) return;
@@ -79,12 +125,9 @@ async function setupFirebaseMessaging() {
         return;
     }
 
-    try {
-        if ('serviceWorker' in navigator) {
-            swRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-        }
-    } catch (error) {
-        console.warn('Không thể đăng ký Service Worker cho FCM:', error);
+    swRegistration = await registerMessagingServiceWorker();
+    if (!swRegistration) {
+        console.warn('FCM chưa hoạt động vì không đăng ký được Service Worker.');
     }
 
     messaging.onMessage((payload) => {
@@ -126,11 +169,16 @@ function updatePushButtonState(enabled) {
 
 async function enablePushNotifications() {
     if (!(await isFCMSupported())) {
-        alert('Thiết bị/trình duyệt chưa hỗ trợ Firebase Cloud Messaging.');
+        alert(getPushUnsupportedReason());
         return;
     }
 
     await setupFirebaseMessaging();
+
+    if (!swRegistration) {
+        alert(`Không đăng ký được Service Worker cho FCM. Hãy kiểm tra file firebase-messaging-sw.js có tồn tại ở ${getSiteBasePath()}firebase-messaging-sw.js`);
+        return;
+    }
 
     try {
         if ('Notification' in window && Notification.permission !== 'granted') {
@@ -142,8 +190,10 @@ async function enablePushNotifications() {
             }
         }
 
-        const options = { vapidKey: FCM_VAPID_PUBLIC_KEY };
-        if (swRegistration) options.serviceWorkerRegistration = swRegistration;
+        const options = {
+            vapidKey: FCM_VAPID_PUBLIC_KEY,
+            serviceWorkerRegistration: swRegistration
+        };
 
         const token = await messaging.getToken(options);
         if (!token) {
@@ -157,7 +207,7 @@ async function enablePushNotifications() {
         showSystemToast('Đã bật thông báo thông minh qua FCM.');
     } catch (error) {
         console.error('Bật thông báo đẩy thất bại:', error);
-        alert('Không thể bật thông báo đẩy. Hãy kiểm tra VAPID key trong script.js.');
+        alert('Không thể bật thông báo đẩy. Kiểm tra Service Worker, domain HTTPS và VAPID key.');
     }
 }
 
@@ -166,6 +216,10 @@ async function autoEnablePushIfPossible() {
     if (!getCurrentUser()?.email) return;
 
     await setupFirebaseMessaging();
+    if (!swRegistration) {
+        updatePushButtonState(false);
+        return;
+    }
 
     if ('Notification' in window && Notification.permission !== 'granted') {
         updatePushButtonState(false);
@@ -173,8 +227,10 @@ async function autoEnablePushIfPossible() {
     }
 
     try {
-        const options = { vapidKey: FCM_VAPID_PUBLIC_KEY };
-        if (swRegistration) options.serviceWorkerRegistration = swRegistration;
+        const options = {
+            vapidKey: FCM_VAPID_PUBLIC_KEY,
+            serviceWorkerRegistration: swRegistration
+        };
 
         const token = await messaging.getToken(options);
         if (!token) {
