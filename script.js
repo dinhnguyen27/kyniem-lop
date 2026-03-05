@@ -211,22 +211,27 @@ async function getFcmTokenWithFallback() {
 }
 
 function buildPushErrorMessage(error) {
-    const code = error?.code || '';
+    const code = String(error?.code || '');
     const message = String(error?.message || '');
+    const lower = `${code} ${message}`.toLowerCase();
 
     if (code.includes('unsupported-browser')) {
         return getPushUnsupportedReason();
-    }
-
-    if (code.includes('token-subscribe-failed') || message.includes('create-installation-request')) {
-        return 'Không đăng ký được token push (FI 400). Thường do VAPID key không khớp project Firebase hoặc cấu hình app web chưa đúng.';
     }
 
     if (code.includes('permission-blocked')) {
         return 'Trình duyệt đang chặn thông báo. Hãy mở Site Settings và cho phép Notifications.';
     }
 
-    return 'Không thể bật thông báo đẩy. Kiểm tra Service Worker, domain HTTPS và VAPID key.';
+    if (lower.includes('api key not valid') || lower.includes('installations/request-failed')) {
+        return 'Firebase API key đang không hợp lệ hoặc bị chặn theo domain. Đây KHÔNG phải lỗi VAPID. Hãy kiểm tra lại apiKey trong firebaseConfig và phần API key restrictions trên Google Cloud Console.';
+    }
+
+    if (code.includes('token-subscribe-failed') || message.includes('create-installation-request')) {
+        return 'Không đăng ký được token push (FI 400). Thường do VAPID key không khớp project Firebase hoặc cấu hình app web chưa đúng.';
+    }
+
+    return 'Không thể bật thông báo đẩy. Kiểm tra Service Worker, domain HTTPS và cấu hình Firebase.';
 }
 
 async function enablePushNotifications() {
