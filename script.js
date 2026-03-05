@@ -39,6 +39,176 @@ let chatReadState = JSON.parse(localStorage.getItem(CHAT_READ_KEY) || '{}');
 const CHAT_EMOJIS = ['😀','😁','😂','🤣','😊','😍','🥰','😘','😎','🤩','😢','😭','😡','👍','👏','🙏','🔥','🎉','💖','💬','🌸','🎓','🫶','✨'];
 
 
+const FCM_TOKEN_KEY = 'class_fcm_token';
+const FCM_VAPID_PUBLIC_KEY = 'BFrdIOzjpU5hTbLY7PrS5LBZUZTFobgNH3jXd5CYu1akplI9gjZOx-gHMiadLZojTlY2sYMyveEApLRppP_yJq0';
+
+let messaging = null;
+let swRegistration = null;
+
+let fcmSupportCache = null;
+
+async function isFCMSupported() {
+    if (fcmSupportCache !== null) return fcmSupportCache;
+
+    if (!firebase.messaging || !firebase.messaging.isSupported) {
+        fcmSupportCache = false;
+        return false;
+    }
+
+    try {
+        const supportResult = firebase.messaging.isSupported();
+        fcmSupportCache = typeof supportResult?.then === 'function'
+            ? Boolean(await supportResult)
+            : Boolean(supportResult);
+    } catch (error) {
+        fcmSupportCache = false;
+        console.warn('FCM không được hỗ trợ trên trình duyệt này:', error);
+    }
+
+    return fcmSupportCache;
+}
+
+async function setupFirebaseMessaging() {
+    if (!(await isFCMSupported())) return;
+    if (messaging) return;
+
+    try {
+        messaging = firebase.messaging();
+    } catch (error) {
+        console.warn('Không thể khởi tạo Firebase Messaging:', error);
+        return;
+    }
+
+    try {
+        if ('serviceWorker' in navigator) {
+            swRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+        }
+    } catch (error) {
+        console.warn('Không thể đăng ký Service Worker cho FCM:', error);
+    }
+
+    messaging.onMessage((payload) => {
+        const title = payload?.notification?.title || payload?.data?.title || 'Thông báo mới';
+        const body = payload?.notification?.body || payload?.data?.body || '';
+        if (body) showSystemToast(body);
+
+        if ('Notification' in window && Notification.permission === 'granted') {
+            new Notification(title, { body });
+        }
+    });
+}
+
+async function saveFcmTokenForCurrentUser(token) {
+    const user = getCurrentUser();
+    if (!user?.email || !token) return;
+
+    const snap = await db.collection('users').where('email', '==', user.email.toLowerCase()).limit(1).get();
+    if (snap.empty) return;
+
+    await db.collection('users').doc(snap.docs[0].id).update({
+        fcmTokens: firebase.firestore.FieldValue.arrayUnion(token),
+        fcmUpdatedAt: Date.now()
+    });
+}
+
+function updatePushButtonState(enabled) {
+    const btn = document.getElementById('enable-push-btn');
+    if (!btn) return;
+
+    if (enabled) {
+        btn.textContent = 'Thông báo đẩy: Đã bật';
+        btn.disabled = true;
+    } else {
+        btn.textContent = 'Bật thông báo đẩy';
+        btn.disabled = false;
+    }
+}
+
+async function enablePushNotifications() {
+    if (!(await isFCMSupported())) {
+        alert('Thiết bị/trình duyệt chưa hỗ trợ Firebase Cloud Messaging.');
+        return;
+    }
+
+    await setupFirebaseMessaging();
+
+    try {
+        if ('Notification' in window && Notification.permission !== 'granted') {
+            const permission = await Notification.requestPermission();
+            if (permission !== 'granted') {
+                alert('Bạn cần cho phép thông báo để nhận tin khi không mở tab web.');
+                updatePushButtonState(false);
+                return;
+            }
+        }
+
+        const options = { vapidKey: FCM_VAPID_PUBLIC_KEY };
+        if (swRegistration) options.serviceWorkerRegistration = swRegistration;
+
+        const token = await messaging.getToken(options);
+        if (!token) {
+            alert('Chưa lấy được FCM token. Vui lòng thử lại.');
+            return;
+        }
+
+        localStorage.setItem(FCM_TOKEN_KEY, token);
+        await saveFcmTokenForCurrentUser(token);
+        updatePushButtonState(true);
+        showSystemToast('Đã bật thông báo thông minh qua FCM.');
+    } catch (error) {
+        console.error('Bật thông báo đẩy thất bại:', error);
+        alert('Không thể bật thông báo đẩy. Hãy kiểm tra VAPID key trong script.js.');
+    }
+}
+
+async function autoEnablePushIfPossible() {
+    if (!(await isFCMSupported())) return;
+    if (!getCurrentUser()?.email) return;
+
+    await setupFirebaseMessaging();
+
+    if ('Notification' in window && Notification.permission !== 'granted') {
+        updatePushButtonState(false);
+        return;
+    }
+
+    try {
+        const options = { vapidKey: FCM_VAPID_PUBLIC_KEY };
+        if (swRegistration) options.serviceWorkerRegistration = swRegistration;
+
+        const token = await messaging.getToken(options);
+        if (!token) {
+            updatePushButtonState(false);
+            return;
+        }
+
+        const oldToken = localStorage.getItem(FCM_TOKEN_KEY);
+        if (oldToken !== token) {
+            localStorage.setItem(FCM_TOKEN_KEY, token);
+            await saveFcmTokenForCurrentUser(token);
+        }
+
+        updatePushButtonState(true);
+    } catch (error) {
+        console.warn('Không tự kích hoạt được FCM:', error);
+        updatePushButtonState(false);
+    }
+}
+
+async function queueNotificationEvent(eventId, payload) {
+    if (!eventId || !payload) return;
+
+    try {
+        await db.collection('notification_events').doc(eventId).set({
+            ...payload,
+            createdAt: Date.now()
+        }, { merge: true });
+    } catch (error) {
+        console.warn('Không thể tạo sự kiện thông báo:', error);
+    }
+}
+
+
 function buildAvatarUrl(name = 'Thành viên lớp') {
     return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=ff7e5f&color=fff`;
 }
@@ -115,6 +285,14 @@ function notifyUnlockedMessages(allMessages, today) {
         : `Có ${newlyUnlocked.length} bức thư vừa mở khóa!`;
 
     showSystemToast(message);
+
+    const unlockedIds = newlyUnlocked.map((m) => m.id).filter(Boolean).join('_');
+    queueNotificationEvent(`unlock_${unlockedIds}`, {
+        type: 'capsule_unlocked',
+        unlockMessageIds: newlyUnlocked.map((m) => m.id).filter(Boolean),
+        senderName: latest.sender || 'một bạn',
+        body: message
+    });
 
     if ('Notification' in window && Notification.permission === 'granted') {
         new Notification('Hộp thư thời gian', { body: message });
@@ -371,7 +549,7 @@ async function sendPrivateMessage() {
     if (!me?.email || !selectedChatUser?.email || !text) return;
 
     try {
-        await db.collection('private_messages').add({
+        const docRef = await db.collection('private_messages').add({
             chatKey: getChatKey(me.email, selectedChatUser.email),
             participants: [me.email.toLowerCase(), selectedChatUser.email.toLowerCase()],
             senderEmail: me.email.toLowerCase(),
@@ -380,6 +558,15 @@ async function sendPrivateMessage() {
             receiverEmail: selectedChatUser.email.toLowerCase(),
             text,
             createdAt: Date.now()
+        });
+
+        await queueNotificationEvent(`chat_${docRef.id}`, {
+            type: 'chat_new_message',
+            messageId: docRef.id,
+            senderEmail: me.email.toLowerCase(),
+            senderName: me.name || me.email,
+            receiverEmail: selectedChatUser.email.toLowerCase(),
+            textPreview: text.slice(0, 120)
         });
         const otherEmail = selectedChatUser.email.toLowerCase();
         lastMessageAtByEmail[otherEmail] = Date.now();
@@ -544,6 +731,7 @@ function enterMainSite() {
     updateCurrentUserDisplay();
     startPresenceTracking();
     initPrivateChatUsers();
+    autoEnablePushIfPossible();
 }
 
 async function logoutUser() {
@@ -562,6 +750,7 @@ async function logoutUser() {
         } catch (e) {}
     }
     localStorage.removeItem(SESSION_KEY);
+    updatePushButtonState(false);
     document.getElementById('main-content').style.display = 'none';
     document.getElementById('password-screen').style.display = 'flex';
     if (audio) {
@@ -1364,6 +1553,9 @@ window.addEventListener('click', function(e) {
 
 window.addEventListener('DOMContentLoaded', () => {
     initPasswordToggles();
+    setupFirebaseMessaging().catch((error) => {
+        console.warn('Bỏ qua khởi tạo FCM:', error);
+    });
     updateLetterCountdowns();
     setInterval(updateLetterCountdowns, 1000);
 
