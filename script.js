@@ -167,6 +167,68 @@ function updatePushButtonState(enabled) {
     }
 }
 
+function prepareMessagingCompat() {
+    if (!messaging) return;
+
+    try {
+        if (swRegistration && typeof messaging.useServiceWorker === 'function') {
+            messaging.useServiceWorker(swRegistration);
+        }
+
+        if (FCM_VAPID_PUBLIC_KEY && typeof messaging.usePublicVapidKey === 'function') {
+            messaging.usePublicVapidKey(FCM_VAPID_PUBLIC_KEY);
+        }
+    } catch (error) {
+        console.warn('Không cấu hình được messaging compat API:', error);
+    }
+}
+
+async function getFcmTokenWithFallback() {
+    if (!messaging) return null;
+
+    prepareMessagingCompat();
+
+    const strategies = [
+        async () => messaging.getToken({ vapidKey: FCM_VAPID_PUBLIC_KEY, serviceWorkerRegistration: swRegistration }),
+        async () => messaging.getToken({ vapidKey: FCM_VAPID_PUBLIC_KEY }),
+        async () => messaging.getToken()
+    ];
+
+    let lastError = null;
+
+    for (let i = 0; i < strategies.length; i++) {
+        try {
+            const token = await strategies[i]();
+            if (token) return token;
+        } catch (error) {
+            lastError = error;
+            console.warn(`Lấy FCM token thất bại ở chiến lược ${i + 1}:`, error);
+        }
+    }
+
+    if (lastError) throw lastError;
+    return null;
+}
+
+function buildPushErrorMessage(error) {
+    const code = error?.code || '';
+    const message = String(error?.message || '');
+
+    if (code.includes('unsupported-browser')) {
+        return getPushUnsupportedReason();
+    }
+
+    if (code.includes('token-subscribe-failed') || message.includes('create-installation-request')) {
+        return 'Không đăng ký được token push (FI 400). Thường do VAPID key không khớp project Firebase hoặc cấu hình app web chưa đúng.';
+    }
+
+    if (code.includes('permission-blocked')) {
+        return 'Trình duyệt đang chặn thông báo. Hãy mở Site Settings và cho phép Notifications.';
+    }
+
+    return 'Không thể bật thông báo đẩy. Kiểm tra Service Worker, domain HTTPS và VAPID key.';
+}
+
 async function enablePushNotifications() {
     if (!(await isFCMSupported())) {
         alert(getPushUnsupportedReason());
@@ -190,12 +252,7 @@ async function enablePushNotifications() {
             }
         }
 
-        const options = {
-            vapidKey: FCM_VAPID_PUBLIC_KEY,
-            serviceWorkerRegistration: swRegistration
-        };
-
-        const token = await messaging.getToken(options);
+        const token = await getFcmTokenWithFallback();
         if (!token) {
             alert('Chưa lấy được FCM token. Vui lòng thử lại.');
             return;
@@ -207,7 +264,7 @@ async function enablePushNotifications() {
         showSystemToast('Đã bật thông báo thông minh qua FCM.');
     } catch (error) {
         console.error('Bật thông báo đẩy thất bại:', error);
-        alert('Không thể bật thông báo đẩy. Kiểm tra Service Worker, domain HTTPS và VAPID key.');
+        alert(buildPushErrorMessage(error));
     }
 }
 
@@ -227,12 +284,7 @@ async function autoEnablePushIfPossible() {
     }
 
     try {
-        const options = {
-            vapidKey: FCM_VAPID_PUBLIC_KEY,
-            serviceWorkerRegistration: swRegistration
-        };
-
-        const token = await messaging.getToken(options);
+        const token = await getFcmTokenWithFallback();
         if (!token) {
             updatePushButtonState(false);
             return;
