@@ -1,6 +1,6 @@
 // 1. Cấu hình Firebase
 const firebaseConfig = {
-    apiKey: "AIzaSyA1LkOgOfvmM49o4G4B8ZgoMglAPjNdD5w",
+    apiKey: "AIzaSyA1lkOgOfvmM49o4G4B8ZgoMglAPjNdD5w",
     authDomain: "kyniemlop-d3404.firebaseapp.com",
     projectId: "kyniemlop-d3404",
     storageBucket: "kyniemlop-d3404.firebasestorage.app",
@@ -1698,3 +1698,4 @@ window.addEventListener('DOMContentLoaded', () => {
     }
     updateCurrentUserDisplay();
 });
+
