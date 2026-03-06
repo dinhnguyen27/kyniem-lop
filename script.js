@@ -93,8 +93,8 @@ async function isFCMSupported() {
     return fcmSupportCache;
 }
 
-async function registerMessagingServiceWorker() {␊
-    if (!('serviceWorker' in navigator)) return null;␊
+async function registerMessagingServiceWorker() {
+    if (!('serviceWorker' in navigator)) return null;
 
     const basePath = getSiteBasePath();
     const candidates = basePath === '/'
@@ -1709,6 +1709,7 @@ window.addEventListener('DOMContentLoaded', () => {
     }
     updateCurrentUserDisplay();
 });
+
 
 
 
