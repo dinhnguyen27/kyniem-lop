@@ -1575,6 +1575,7 @@ video[poster] {
     display: inline-flex;
 }
 
+
 /* ===== Responsive & overflow guardrails (desktop + mobile) ===== */
 html,
 body {
@@ -1794,5 +1795,108 @@ header,
     .emoji-picker {
         left: 6px;
         right: 6px;
+    }
+}
+
+/* ===== Mobile compact header/account UI tuning ===== */
+@media (max-width: 768px) {
+    header {
+        padding: 14px 10px 10px;
+    }
+
+    header h1 {
+        margin-bottom: 4px;
+        line-height: 1.1;
+        font-size: clamp(1.5rem, 7vw, 2.1rem);
+    }
+
+    header > p {
+        margin: 0;
+        font-size: 0.9rem;
+        opacity: 0.9;
+    }
+
+    .user-chip {
+        margin-top: 10px;
+        padding: 8px 10px;
+        gap: 6px;
+        border-radius: 14px;
+        backdrop-filter: blur(8px);
+    }
+
+    .user-avatar {
+        width: 30px;
+        height: 30px;
+    }
+
+    #current-user-display {
+        font-size: 0.78rem;
+        line-height: 1.2;
+        margin-top: 2px;
+        color: rgba(255, 255, 255, 0.95);
+    }
+
+    .online-status {
+        font-size: 10px;
+        padding: 3px 6px;
+    }
+
+    .user-chip button,
+    #enable-push-btn {
+        width: auto;
+        padding: 5px 9px;
+        font-size: 0.76rem;
+        border-radius: 14px;
+        white-space: nowrap;
+    }
+
+    .countdown-container {
+        margin: 10px auto;
+        padding: 10px 8px;
+    }
+
+    #countdown-title {
+        margin: 0 0 6px;
+        font-size: 0.95rem;
+    }
+
+    #timer {
+        font-size: 1.05rem;
+    }
+
+    .btn-surprise {
+        padding: 10px 12px;
+        font-size: 0.9rem;
+    }
+
+    .time-capsule-section {
+        margin-top: 12px;
+    }
+}
+
+@media (max-width: 560px) {
+    /* Giữ thao tác chính, thu gọn thông tin phụ để tiết kiệm chiều cao */
+    header > p {
+        display: none;
+    }
+
+    #current-user-display {
+        display: none;
+    }
+
+    .user-chip {
+        justify-content: center;
+        row-gap: 8px;
+    }
+
+    .user-chip button,
+    #enable-push-btn {
+        flex: 1 1 calc(50% - 8px);
+        min-width: 120px;
+        text-align: center;
+    }
+
+    .countdown-container {
+        width: calc(100vw - 16px);
     }
 }
