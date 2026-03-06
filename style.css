@@ -2057,3 +2057,67 @@ header,
         font-size: 11px;
     }
 }
+
+/* ===== Rich in-web notification toast ===== */
+#music-toast {
+    min-width: min(92vw, 360px);
+    max-width: min(92vw, 420px);
+    padding: 10px 14px;
+    border-radius: 14px;
+    background: rgba(22, 22, 30, 0.88);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.35);
+    font-weight: 500;
+}
+
+#music-toast .toast-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+#music-toast .toast-icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.14);
+    font-size: 14px;
+    flex: 0 0 24px;
+}
+
+#music-toast .toast-title {
+    font-weight: 700;
+    font-size: 13px;
+    color: #fff;
+}
+
+#music-toast .toast-meta {
+    margin-left: auto;
+    font-size: 11px;
+    opacity: 0.85;
+    color: #ffd6cc;
+}
+
+#music-toast .toast-body {
+    margin-top: 5px;
+    font-size: 13px;
+    color: #f4f4f4;
+    line-height: 1.35;
+    word-break: break-word;
+}
+
+@media (max-width: 560px) {
+    #music-toast {
+        min-width: calc(100vw - 20px);
+        max-width: calc(100vw - 20px);
+        top: -86px;
+        padding: 10px 12px;
+    }
+
+    #music-toast.show {
+        top: 14px;
+    }
+}
