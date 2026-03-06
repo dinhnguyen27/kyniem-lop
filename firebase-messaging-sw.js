@@ -25,3 +25,22 @@ messaging.setBackgroundMessageHandler((payload) => {
 
 });
 
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+
+  const data = event.notification?.data || {};
+  const targetUrl = data.link || data.click_action || data.url || '/';
+
+  event.waitUntil((async () => {
+    const allClients = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const matched = allClients.find((client) => client.url.includes(targetUrl) || client.url.includes('/kyniem-lop/'));
+
+    if (matched) {
+      await matched.focus();
+      return;
+    }
+
+    await clients.openWindow(targetUrl);
+  })());
+});    
