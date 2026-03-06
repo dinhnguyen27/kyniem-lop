@@ -4,11 +4,15 @@ const admin = require('firebase-admin');
 admin.initializeApp();
 const db = admin.firestore();
 
+const DEFAULT_WEBPUSH_LINK = 'https://dinhnguyen27.github.io/kyniem-lop/';
+
 exports.sendPushFromEvent = functions.firestore
   .document('notification_events/{eventId}')
-  .onCreate(async (snap) => {
+  .onCreate(async (snap, context) => {
     const event = snap.data() || {};
     const type = event.type;
+
+    functions.logger.info('Nhận notification event', { eventId: context.params.eventId, type });
 
     if (!type) return null;
 
@@ -21,14 +25,22 @@ exports.sendPushFromEvent = functions.firestore
         .limit(1)
         .get();
 
-      if (userSnap.empty) return null;
+      if (userSnap.empty) {
+        functions.logger.warn('Không tìm thấy người nhận để gửi chat push', { receiverEmail });
+        return null;
+      }
 
       const userData = userSnap.docs[0].data() || {};
       const tokens = Array.isArray(userData.fcmTokens) ? userData.fcmTokens.filter(Boolean) : [];
-      if (!tokens.length) return null;
+      if (!tokens.length) {
+        functions.logger.warn('Người nhận chưa có FCM token', { receiverEmail });
+        return null;
+      }
 
       const senderName = event.senderName || 'Bạn cùng lớp';
       const textPreview = event.textPreview || 'Bạn có tin nhắn mới';
+
+      const pushLink = String(event.link || DEFAULT_WEBPUSH_LINK);
 
       const response = await admin.messaging().sendEachForMulticast({
         tokens,
@@ -36,11 +48,36 @@ exports.sendPushFromEvent = functions.firestore
           title: `💬 ${senderName} vừa nhắn tin`,
           body: textPreview
         },
+        android: {
+          priority: 'high'
+        },
         data: {
           type: 'chat_new_message',
           senderEmail: String(event.senderEmail || ''),
-          receiverEmail
+          receiverEmail,
+          title: `💬 ${senderName} vừa nhắn tin`,
+          body: textPreview,
+          link: pushLink
+        },
+        webpush: {
+          headers: {
+            Urgency: 'high'
+          },
+          fcmOptions: {
+            link: pushLink
+          },
+          notification: {
+            title: `💬 ${senderName} vừa nhắn tin`,
+            body: textPreview,
+            icon: 'https://www.gstatic.com/mobilesdk/160503_mobilesdk/logo/2x/firebase_28dp.png'
+          }
         }
+      });
+
+      functions.logger.info('Kết quả gửi chat push', {
+        receiverEmail,
+        successCount: response.successCount,
+        failureCount: response.failureCount
       });
 
       return cleanupInvalidTokens(userSnap.docs[0].ref, tokens, response.responses);
@@ -59,20 +96,42 @@ exports.sendPushFromEvent = functions.firestore
       });
 
       await Promise.all(sendJobs);
+      functions.logger.info('Đã xử lý gửi capsule push', { users: users.size, jobs: sendJobs.length });
     }
 
     return null;
   });
 
 async function sendCapsulePush(userRef, tokens, event) {
+  const pushLink = String(event.link || DEFAULT_WEBPUSH_LINK);
+
   const response = await admin.messaging().sendEachForMulticast({
     tokens,
     notification: {
       title: '✉️ Hộp thư thời gian mở khóa',
       body: event.body || 'Có thư mới vừa được mở khóa.'
     },
+    android: {
+      priority: 'high'
+    },
     data: {
-      type: 'capsule_unlocked'
+      type: 'capsule_unlocked',
+      title: '✉️ Hộp thư thời gian mở khóa',
+      body: event.body || 'Có thư mới vừa được mở khóa.',
+      link: pushLink
+    },
+    webpush: {
+      headers: {
+        Urgency: 'high'
+      },
+      fcmOptions: {
+        link: pushLink
+      },
+      notification: {
+        title: '✉️ Hộp thư thời gian mở khóa',
+        body: event.body || 'Có thư mới vừa được mở khóa.',
+        icon: 'https://www.gstatic.com/mobilesdk/160503_mobilesdk/logo/2x/firebase_28dp.png'
+      }
     }
   });
 
