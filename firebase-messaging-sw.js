@@ -13,18 +13,53 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
+function extractPayload(rawPayload) {
+  const payload = rawPayload || {};
+  const data = payload.data || {};
+  const notification = payload.notification || {};
+
+  const title = notification.title || data.title || 'Thông báo mới';
+  const body = notification.body || data.body || '';
+  const link = data.link || payload.fcmOptions?.link || '/';
+  const icon = notification.icon || data.icon || 'https://www.gstatic.com/mobilesdk/160503_mobilesdk/logo/2x/firebase_28dp.png';
+
+  return {
+    title,
+    options: {
+      body,
+      icon,
+      badge: data.badge || icon,
+      tag: data.tag || data.type || 'class-notification',
+      renotify: true,
+      data: { ...data, link }
+    }
+  };
+}
+
+function safeParsePushData(event) {
+  try {
+    return event?.data?.json?.() || {};
+  } catch (_) {
+    try {
+      const text = event?.data?.text?.() || '{}';
+      return JSON.parse(text);
+    } catch (_) {
+      return {};
+    }
+  }
+}
+
 messaging.setBackgroundMessageHandler((payload) => {
-  const title = payload?.notification?.title || payload?.data?.title || 'Thông báo mới';
-  const body = payload?.notification?.body || payload?.data?.body || '';
-
-  return self.registration.showNotification(title, {
-    body,
-    icon: 'https://www.gstatic.com/mobilesdk/160503_mobilesdk/logo/2x/firebase_28dp.png',
-    data: payload?.data || {}
-  });
-
+  const { title, options } = extractPayload(payload);
+  return self.registration.showNotification(title, options);
 });
 
+self.addEventListener('push', (event) => {
+  const payload = safeParsePushData(event);
+  const { title, options } = extractPayload(payload);
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
@@ -34,7 +69,11 @@ self.addEventListener('notificationclick', (event) => {
 
   event.waitUntil((async () => {
     const allClients = await clients.matchAll({ type: 'window', includeUncontrolled: true });
-    const matched = allClients.find((client) => client.url.includes(targetUrl) || client.url.includes('/kyniem-lop/'));
+
+    const matched = allClients.find((client) => {
+      if (!client?.url) return false;
+      return client.url.includes(targetUrl) || client.url.includes('/kyniem-lop/');
+    });
 
     if (matched) {
       await matched.focus();
@@ -43,4 +82,4 @@ self.addEventListener('notificationclick', (event) => {
 
     await clients.openWindow(targetUrl);
   })());
-});    
+});
