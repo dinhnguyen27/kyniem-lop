@@ -526,16 +526,22 @@ function saveChatReadState() {
 
 function updateGlobalChatUnreadBadge() {
     const badge = document.getElementById('chat-unread-badge');
+    const toggleBtn = document.getElementById('chat-toggle-btn');
     if (!badge) return;
 
     const senders = Object.values(unreadCountsByEmail).filter((c) => Number(c) > 0).length;
     if (senders <= 0) {
         badge.style.display = 'none';
+        badge.textContent = '0';
+        toggleBtn?.classList.remove('has-unread');
+        toggleBtn?.setAttribute('aria-label', 'Chat');
         return;
     }
 
     badge.style.display = 'inline-flex';
     badge.textContent = senders > 99 ? '99+' : String(senders);
+    toggleBtn?.classList.add('has-unread');
+    toggleBtn?.setAttribute('aria-label', `Chat (${badge.textContent} người gửi tin nhắn mới)`);
 }
 
 function markChatAsRead(otherEmail, timestamp = Date.now()) {
@@ -1560,8 +1566,13 @@ function loadTimeCapsuleMessages() {
                 const card = createCardMarkup(data, isLocked); 
                 
                 // Thiết lập vị trí 3D
-                const angle = index * 60; 
-                const radius = 220; // Khoảng cách từ trục đến thư
+                const angleStep = top6.length ? (360 / top6.length) : 60;
+                const angle = index * angleStep;
+                const isMobile = window.matchMedia('(max-width: 768px)').matches;
+                const cardWidth = isMobile ? 140 : 180;
+                const containerWidth = carouselDiv.closest('.carousel-3d-container')?.clientWidth || window.innerWidth;
+                const maxRadiusByWidth = Math.floor((containerWidth - cardWidth - 24) / 2);
+                const radius = Math.max(isMobile ? 95 : 120, Math.min(isMobile ? 135 : 180, maxRadiusByWidth));
 
                 // CHỈ DÙNG TRANSFORM ĐỂ ĐỊNH VỊ 3D
                 card.style.transform = `rotateY(${angle}deg) translateZ(${radius}px)`;
@@ -1737,6 +1748,7 @@ window.addEventListener('DOMContentLoaded', () => {
     }
     updateCurrentUserDisplay();
 });
+
 
 
 
