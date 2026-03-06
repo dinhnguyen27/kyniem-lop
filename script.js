@@ -93,8 +93,8 @@ async function isFCMSupported() {
     return fcmSupportCache;
 }
 
-async function registerMessagingServiceWorker() {
-    if (!('serviceWorker' in navigator)) return null;
+async function registerMessagingServiceWorker() {␊
+    if (!('serviceWorker' in navigator)) return null;␊
 
     const basePath = getSiteBasePath();
     const candidates = basePath === '/'
@@ -104,13 +104,14 @@ async function registerMessagingServiceWorker() {
     for (const swUrl of candidates) {
         try {
             const registration = await navigator.serviceWorker.register(swUrl, { scope: basePath });
+            await navigator.serviceWorker.ready;
             console.info(`FCM Service Worker đã đăng ký: ${swUrl}`);
             return registration;
         } catch (error) {
             console.warn(`Không đăng ký được SW tại ${swUrl}:`, error);
         }
     }
-
+                                                 
     return null;
 }
 
@@ -136,7 +137,17 @@ async function setupFirebaseMessaging() {
         if (body) showSystemToast(body);
 
         if ('Notification' in window && Notification.permission === 'granted') {
-            new Notification(title, { body });
+            if (swRegistration?.showNotification) {
+                swRegistration.showNotification(title, { body }).catch((error) => {
+                    console.warn('Không hiển thị được thông báo foreground qua SW:', error);
+                });
+            } else {
+                try {
+                    new Notification(title, { body });
+                } catch (error) {
+                    console.warn('Không hiển thị được thông báo foreground qua Notification API:', error);
+                }
+            }
         }
     });
 }
@@ -1698,6 +1709,7 @@ window.addEventListener('DOMContentLoaded', () => {
     }
     updateCurrentUserDisplay();
 });
+
 
 
 
