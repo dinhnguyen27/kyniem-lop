@@ -40,6 +40,7 @@ const CHAT_EMOJIS = ['😀','😁','😂','🤣','😊','😍','🥰','😘','�
 
 
 const FCM_TOKEN_KEY = 'class_fcm_token';
+const AUTO_PUSH_PROMPT_KEY = 'class_auto_push_prompted';
 const FCM_VAPID_PUBLIC_KEY = 'BFrdIOzjpU5hTbLY7PrS5LBZUZTFobgNH3jXd5CYu1akplI9gjZOx-gHMiadLZojTlY2sYMyveEApLRppP_yJq0';
 
 let messaging = null;
@@ -150,9 +151,23 @@ async function setupFirebaseMessaging() {
     }
 
     messaging.onMessage((payload) => {
+        const type = payload?.data?.type || '';
         const title = payload?.notification?.title || payload?.data?.title || 'Thông báo mới';
         const body = payload?.notification?.body || payload?.data?.body || '';
-        if (body) showSystemToast(body);
+       const senderName = payload?.data?.senderName || payload?.data?.sender || '';
+        const sentAt = Number(payload?.data?.sentAt || Date.now());
+
+        if (body) {
+            if (type === 'chat_new_message') {
+                showSystemToast(body, {
+                    icon: '💬',
+                    title: senderName ? `Tin nhắn từ ${senderName}` : 'Tin nhắn mới',
+                    meta: formatChatTime(sentAt)
+                });
+            } else {
+                showSystemToast(body, { icon: '🔔', title });
+            }
+        }
 
         if ('Notification' in window && Notification.permission === 'granted') {
             if (swRegistration?.showNotification) {
@@ -273,16 +288,17 @@ function buildPushErrorMessage(error) {
     return 'Không thể bật thông báo đẩy. Kiểm tra Service Worker, domain HTTPS và cấu hình Firebase.';
 }
 
-async function enablePushNotifications() {
+async function enablePushNotifications(options = {}) {
+    const silent = !!options.silent;
     if (!(await isFCMSupported())) {
-        alert(getPushUnsupportedReason());
+        if (!silent) alert(getPushUnsupportedReason());
         return;
     }
 
     await setupFirebaseMessaging();
 
     if (!swRegistration) {
-        alert(`Không đăng ký được Service Worker cho FCM. Hãy kiểm tra file firebase-messaging-sw.js có tồn tại ở ${getSiteBasePath()}firebase-messaging-sw.js`);
+        if (!silent) alert(`Không đăng ký được Service Worker cho FCM. Hãy kiểm tra file firebase-messaging-sw.js có tồn tại ở ${getSiteBasePath()}firebase-messaging-sw.js`);
         return;
     }
 
@@ -290,7 +306,7 @@ async function enablePushNotifications() {
         if ('Notification' in window && Notification.permission !== 'granted') {
             const permission = await Notification.requestPermission();
             if (permission !== 'granted') {
-                alert('Bạn cần cho phép thông báo để nhận tin khi không mở tab web.');
+                if (!silent) alert('Bạn cần cho phép thông báo để nhận tin khi không mở tab web.');
                 updatePushButtonState(false);
                 return;
             }
@@ -298,7 +314,7 @@ async function enablePushNotifications() {
 
         const token = await getFcmTokenWithFallback();
         if (!token) {
-            alert('Chưa lấy được FCM token. Vui lòng thử lại.');
+            if (!silent) alert('Chưa lấy được FCM token. Vui lòng thử lại.');
             return;
         }
 
@@ -308,7 +324,7 @@ async function enablePushNotifications() {
         showSystemToast('Đã bật thông báo thông minh qua FCM.');
     } catch (error) {
         console.error('Bật thông báo đẩy thất bại:', error);
-        alert(buildPushErrorMessage(error));
+        if (!silent) alert(buildPushErrorMessage(error));
     }
 }
 
@@ -345,6 +361,33 @@ async function autoEnablePushIfPossible() {
         console.warn('Không tự kích hoạt được FCM:', error);
         updatePushButtonState(false);
     }
+}
+
+
+async function autoEnablePushFromFirstGesture() {
+    if (localStorage.getItem(AUTO_PUSH_PROMPT_KEY) === '1') return;
+    if (!getCurrentUser()?.email) return;
+
+    localStorage.setItem(AUTO_PUSH_PROMPT_KEY, '1');
+
+    try {
+        await enablePushNotifications({ silent: true });
+    } catch (error) {
+        console.warn('Không tự bật được push từ tương tác đầu tiên:', error);
+    }
+}
+
+function initAutoPushEnableOnFirstGesture() {
+    if (localStorage.getItem(AUTO_PUSH_PROMPT_KEY) === '1') return;
+
+    const trigger = () => {
+        document.removeEventListener('click', trigger, true);
+        document.removeEventListener('touchstart', trigger, true);
+        autoEnablePushFromFirstGesture();
+    };
+
+    document.addEventListener('click', trigger, true);
+    document.addEventListener('touchstart', trigger, true);
 }
 
 async function queueNotificationEvent(eventId, payload) {
@@ -406,13 +449,25 @@ function saveNotifiedUnlockIds() {
     localStorage.setItem(UNLOCK_NOTIFY_KEY, JSON.stringify([...notifiedUnlockIds]));
 }
 
-function showSystemToast(message) {
+function showSystemToast(message, options = {}) {
     const toast = document.getElementById('music-toast');
     if (!toast) return;
 
-    toast.innerHTML = `🔔 ${message}`;
+    const icon = options.icon || '🔔';
+    const title = options.title || 'Thông báo mới';
+    const meta = options.meta ? `<span class="toast-meta">${options.meta}</span>` : '';
+
+    toast.innerHTML = `
+        <div class="toast-top">
+            <span class="toast-icon">${icon}</span>
+            <span class="toast-title">${title}</span>
+            ${meta}
+        </div>
+        <div class="toast-body">${message}</div>
+    `;
+    
     toast.classList.add('show');
-    setTimeout(() => toast.classList.remove('show'), 5000);
+    setTimeout(() => toast.classList.remove('show'), 5200);
 }
 
 function notifyUnlockedMessages(allMessages, today) {
@@ -724,7 +779,8 @@ async function sendPrivateMessage() {
             senderEmail: me.email.toLowerCase(),
             senderName: me.name || me.email,
             receiverEmail: selectedChatUser.email.toLowerCase(),
-            textPreview: text.slice(0, 120)
+            textPreview: text.slice(0, 120),
+            sentAt: Date.now()
         });
         const otherEmail = selectedChatUser.email.toLowerCase();
         lastMessageAtByEmail[otherEmail] = Date.now();
@@ -890,6 +946,7 @@ function enterMainSite() {
     startPresenceTracking();
     initPrivateChatUsers();
     autoEnablePushIfPossible();
+    initAutoPushEnableOnFirstGesture();
 }
 
 async function logoutUser() {
@@ -1748,6 +1805,7 @@ window.addEventListener('DOMContentLoaded', () => {
     }
     updateCurrentUserDisplay();
 });
+
 
 
 
