@@ -44,10 +44,6 @@ exports.sendPushFromEvent = functions.firestore
 
       const response = await admin.messaging().sendEachForMulticast({
         tokens,
-        notification: {
-          title: `💬 ${senderName} vừa nhắn tin`,
-          body: textPreview
-        },
         android: {
           priority: 'high'
         },
@@ -57,11 +53,14 @@ exports.sendPushFromEvent = functions.firestore
           receiverEmail,
           title: `💬 ${senderName} vừa nhắn tin`,
           body: textPreview,
-          link: pushLink
+          link: pushLink,
+          icon: 'https://www.gstatic.com/mobilesdk/160503_mobilesdk/logo/2x/firebase_28dp.png',
+          tag: 'chat_new_message'
         },
         webpush: {
           headers: {
-            Urgency: 'high'
+            Urgency: 'high',
+            TTL: '2419200'
           },
           fcmOptions: {
             link: pushLink
@@ -69,7 +68,8 @@ exports.sendPushFromEvent = functions.firestore
           notification: {
             title: `💬 ${senderName} vừa nhắn tin`,
             body: textPreview,
-            icon: 'https://www.gstatic.com/mobilesdk/160503_mobilesdk/logo/2x/firebase_28dp.png'
+            icon: 'https://www.gstatic.com/mobilesdk/160503_mobilesdk/logo/2x/firebase_28dp.png',
+            requireInteraction: true
           }
         }
       });
@@ -107,10 +107,6 @@ async function sendCapsulePush(userRef, tokens, event) {
 
   const response = await admin.messaging().sendEachForMulticast({
     tokens,
-    notification: {
-      title: '✉️ Hộp thư thời gian mở khóa',
-      body: event.body || 'Có thư mới vừa được mở khóa.'
-    },
     android: {
       priority: 'high'
     },
@@ -118,11 +114,14 @@ async function sendCapsulePush(userRef, tokens, event) {
       type: 'capsule_unlocked',
       title: '✉️ Hộp thư thời gian mở khóa',
       body: event.body || 'Có thư mới vừa được mở khóa.',
-      link: pushLink
+      link: pushLink,
+      icon: 'https://www.gstatic.com/mobilesdk/160503_mobilesdk/logo/2x/firebase_28dp.png',
+      tag: 'capsule_unlocked'
     },
     webpush: {
       headers: {
-        Urgency: 'high'
+        Urgency: 'high',
+        TTL: '2419200'
       },
       fcmOptions: {
         link: pushLink
@@ -130,7 +129,8 @@ async function sendCapsulePush(userRef, tokens, event) {
       notification: {
         title: '✉️ Hộp thư thời gian mở khóa',
         body: event.body || 'Có thư mới vừa được mở khóa.',
-        icon: 'https://www.gstatic.com/mobilesdk/160503_mobilesdk/logo/2x/firebase_28dp.png'
+        icon: 'https://www.gstatic.com/mobilesdk/160503_mobilesdk/logo/2x/firebase_28dp.png',
+        requireInteraction: true
       }
     }
   });
