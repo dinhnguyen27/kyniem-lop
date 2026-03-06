@@ -33,6 +33,7 @@ let selectedChatUser = null;
 let chatUsersCache = [];
 let allChatUsers = [];
 let lastMessageAtByEmail = {};
+let latestMessagePreviewByEmail = {};
 let unreadCountsByEmail = {};
 let chatReadState = JSON.parse(localStorage.getItem(CHAT_READ_KEY) || '{}');
 
@@ -154,7 +155,7 @@ async function setupFirebaseMessaging() {
         const type = payload?.data?.type || '';
         const title = payload?.notification?.title || payload?.data?.title || 'Thông báo mới';
         const body = payload?.notification?.body || payload?.data?.body || '';
-       const senderName = payload?.data?.senderName || payload?.data?.sender || '';
+       const senderName = payload?.data?.senderName || payload?.data?.sender || parseChatSenderFromTitle(title);
         const sentAt = Number(payload?.data?.sentAt || Date.now());
 
         if (body) {
@@ -192,6 +193,12 @@ async function saveFcmTokenForCurrentUser(token) {
         fcmTokens: firebase.firestore.FieldValue.arrayUnion(token),
         fcmUpdatedAt: Date.now()
     });
+}
+
+function parseChatSenderFromTitle(title = '') {
+    const normalized = String(title || '').trim();
+    const match = normalized.match(/^💬\s*(.+?)\s+vừa\s+nhắn\s+tin/i);
+    return match ? match[1].trim() : '';
 }
 
 function updatePushButtonState(enabled) {
@@ -627,6 +634,7 @@ function initRecentMessagesRanking() {
         .where('participants', 'array-contains', me.email.toLowerCase())
         .onSnapshot((snap) => {
             const latest = {};
+            const latestPreview = {};
             const unread = {};
             const myEmail = me.email.toLowerCase();
 
@@ -638,7 +646,14 @@ function initRecentMessagesRanking() {
                 if (!other) return;
 
                 const ts = Number(data.createdAt || 0);
-                if (!latest[other] || ts > latest[other]) latest[other] = ts;
+                if (!latest[other] || ts > latest[other]) {
+                    latest[other] = ts;
+                    latestPreview[other] = {
+                        text: data.text || '',
+                        senderName: data.senderName || '',
+                        isFromMe: sender === myEmail
+                    };
+                }
 
                 const lastRead = Number(chatReadState[other] || 0);
                 const isIncoming = receiver === myEmail && sender === other;
@@ -650,6 +665,7 @@ function initRecentMessagesRanking() {
             });
 
             lastMessageAtByEmail = latest;
+            latestMessagePreviewByEmail = latestPreview;
             unreadCountsByEmail = unread;
             updateGlobalChatUnreadBadge();
             if (allChatUsers.length) renderChatUsers(allChatUsers);
@@ -674,11 +690,20 @@ function renderChatUsers(users) {
         const online = getOnlineStateFromTimestamp(u.lastActiveAt) && !!u.isOnline;
         const avatar = u.avatar || buildAvatarUrl(u.name || 'Bạn');
         const email = (u.email || '').replace(/'/g, "\'");
-        const unreadCount = Number(unreadCountsByEmail[(u.email || '').toLowerCase()] || 0);
+        const emailLower = (u.email || '').toLowerCase();
+        const unreadCount = Number(unreadCountsByEmail[emailLower] || 0);
+        const preview = latestMessagePreviewByEmail[emailLower];
+        const previewPrefix = preview ? (preview.isFromMe ? 'Bạn: ' : '') : '';
+        const previewText = preview?.text ? `${previewPrefix}${preview.text}` : 'Chưa có tin nhắn gần đây';
+        const safePreview = escapeHtml(previewText);
+        
         return `<div class="chat-user-item ${online ? 'online' : ''}" onclick="openPrivateChatByEmail('${email}')">
             <span class="dot"></span>
             <img class="comment-avatar" src="${avatar}" alt="avatar">
-            <span class="chat-user-label">${u.name || u.email} • ${online ? 'Online' : 'Offline'}</span>
+            <div class="chat-user-texts">
+                <span class="chat-user-label">${u.name || u.email} • ${online ? 'Online' : 'Offline'}</span>
+                <span class="chat-user-preview">${safePreview}</span>
+            </div>
             <span class="chat-user-unread ${unreadCount > 0 ? 'show' : ''}">${unreadCount > 99 ? '99+' : unreadCount}</span>
         </div>`;
     }).join('');
@@ -1805,6 +1830,7 @@ window.addEventListener('DOMContentLoaded', () => {
     }
     updateCurrentUserDisplay();
 });
+
 
 
 
