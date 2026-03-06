@@ -1575,7 +1575,6 @@ video[poster] {
     display: inline-flex;
 }
 
-
 /* ===== Responsive & overflow guardrails (desktop + mobile) ===== */
 html,
 body {
@@ -1898,5 +1897,75 @@ header,
 
     .countdown-container {
         width: calc(100vw - 16px);
+    }
+}
+
+/* ===== Fix: music controls stay horizontal + carousel stays in bounds ===== */
+#music-options {
+    flex-wrap: nowrap !important;
+    width: max-content;
+    max-width: none !important;
+    align-items: center;
+}
+
+.carousel-3d-container {
+    overflow: hidden;
+    height: 320px;
+    margin: 24px 0;
+    padding: 18px 0 10px;
+}
+
+.carousel-3d-container h3 {
+    position: absolute;
+    top: 4px;
+    left: 0;
+    right: 0;
+    margin: 0;
+    z-index: 12;
+    font-size: clamp(1.1rem, 3.2vw, 1.5rem);
+}
+
+#capsule-carousel-3d {
+    top: 62%;
+}
+
+#capsule-carousel-3d .capsule-card {
+    width: 180px;
+    height: 210px;
+    left: -90px;
+    top: -105px;
+}
+
+@media (max-width: 768px) {
+    #music-container {
+        overflow: visible;
+    }
+
+    #music-options {
+        left: 56px;
+        top: 0;
+        gap: 8px;
+        transform: translateX(-8px);
+    }
+
+    #music-options.show {
+        transform: translateX(0);
+    }
+
+    .carousel-3d-container {
+        height: 270px;
+        margin: 16px 0;
+        padding-top: 22px;
+    }
+
+    #capsule-carousel-3d {
+        top: 65%;
+    }
+
+    #capsule-carousel-3d .capsule-card {
+        width: 140px;
+        height: 170px;
+        left: -70px;
+        top: -85px;
     }
 }
