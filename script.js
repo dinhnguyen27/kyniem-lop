@@ -65,6 +65,10 @@ function getPushUnsupportedReason() {
         return 'Safari iPhone chỉ hỗ trợ thông báo đẩy khi web được thêm vào Màn hình chính (Add to Home Screen).';
     }
 
+    if (!window.isSecureContext) {
+        return 'Thông báo đẩy chỉ hoạt động trên HTTPS (hoặc localhost).';
+    }
+
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
         return 'Trình duyệt hiện tại chưa hỗ trợ đầy đủ Service Worker/Push API.';
     }
@@ -93,6 +97,20 @@ async function isFCMSupported() {
     return fcmSupportCache;
 }
 
+async function waitForServiceWorkerReady(timeoutMs = 10000) {
+    if (!('serviceWorker' in navigator)) return null;
+
+    try {
+        return await Promise.race([
+            navigator.serviceWorker.ready,
+            new Promise((resolve) => setTimeout(() => resolve(null), timeoutMs))
+        ]);
+    } catch (error) {
+        console.warn('Service Worker chưa sẵn sàng:', error);
+        return null;
+    }
+}
+
 async function registerMessagingServiceWorker() {
     if (!('serviceWorker' in navigator)) return null;
 
@@ -104,9 +122,9 @@ async function registerMessagingServiceWorker() {
     for (const swUrl of candidates) {
         try {
             const registration = await navigator.serviceWorker.register(swUrl, { scope: basePath });
-            await navigator.serviceWorker.ready;
+            const readyRegistration = await waitForServiceWorkerReady();
             console.info(`FCM Service Worker đã đăng ký: ${swUrl}`);
-            return registration;
+            return readyRegistration || registration;
         } catch (error) {
             console.warn(`Không đăng ký được SW tại ${swUrl}:`, error);
         }
@@ -139,14 +157,10 @@ async function setupFirebaseMessaging() {
         if ('Notification' in window && Notification.permission === 'granted') {
             if (swRegistration?.showNotification) {
                 swRegistration.showNotification(title, { body }).catch((error) => {
-                    console.warn('Không hiển thị được thông báo foreground qua SW:', error);
+                    console.warn('Không hiển thị được foreground notification qua SW:', error);
                 });
             } else {
-                try {
-                    new Notification(title, { body });
-                } catch (error) {
-                    console.warn('Không hiển thị được thông báo foreground qua Notification API:', error);
-                }
+                new Notification(title, { body });
             }
         }
     });
@@ -194,6 +208,10 @@ function prepareMessagingCompat() {
     }
 }
 
+function delay(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function getFcmTokenWithFallback() {
     if (!messaging) return null;
 
@@ -208,12 +226,18 @@ async function getFcmTokenWithFallback() {
     let lastError = null;
 
     for (let i = 0; i < strategies.length; i++) {
-        try {
-            const token = await strategies[i]();
-            if (token) return token;
-        } catch (error) {
-            lastError = error;
-            console.warn(`Lấy FCM token thất bại ở chiến lược ${i + 1}:`, error);
+        for (let attempt = 1; attempt <= 2; attempt++) {
+            try {
+                const token = await strategies[i]();
+                if (token) return token;
+            } catch (error) {
+                lastError = error;
+                console.warn(`Lấy FCM token thất bại ở chiến lược ${i + 1}, lần ${attempt}:`, error);
+            }
+
+            if (attempt < 2) {
+                await delay(400 * attempt);
+            }
         }
     }
 
@@ -226,7 +250,7 @@ function buildPushErrorMessage(error) {
     const message = String(error?.message || '');
     const lower = `${code} ${message}`.toLowerCase();
 
-    if (code.includes('unsupported-browser')) {
+    if (code.includes('unsupported-browser') || lower.includes('unsupported-browser')) {
         return getPushUnsupportedReason();
     }
 
@@ -236,6 +260,10 @@ function buildPushErrorMessage(error) {
 
     if (lower.includes('api key not valid') || lower.includes('installations/request-failed')) {
         return 'Firebase API key đang không hợp lệ hoặc bị chặn theo domain. Đây KHÔNG phải lỗi VAPID. Hãy kiểm tra lại apiKey trong firebaseConfig và phần API key restrictions trên Google Cloud Console.';
+    }
+
+    if (lower.includes('standalone') || lower.includes('add to home screen')) {
+        return 'Trên iPhone, hãy thêm web vào Màn hình chính rồi mở từ icon đó trước khi bật thông báo.';
     }
 
     if (code.includes('token-subscribe-failed') || message.includes('create-installation-request')) {
@@ -1709,6 +1737,7 @@ window.addEventListener('DOMContentLoaded', () => {
     }
     updateCurrentUserDisplay();
 });
+
 
 
 
