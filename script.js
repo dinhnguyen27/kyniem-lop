@@ -183,26 +183,31 @@ function prepareMessagingCompat() {
     }
 }
 
-// Cấu trúc chuẩn để tránh lỗi messaging/use-sw-after-get-token
-async function getFcmTokenWithFallback(registration) {
-    const messaging = firebase.messaging();
-    
-    try {
-        // BƯỚC 1: Cấu hình Service Worker TRƯỚC
-        messaging.useServiceWorker(registration); 
+async function getFcmTokenWithFallback() {
+    if (!messaging) return null;
 
-        // BƯỚC 2: Sau đó mới gọi getToken
-        const currentToken = await messaging.getToken({
-            vapidKey: 'BFrdIOzjpU5hTbLY7PrS5LBZUZTFobgNH3jXd5CYu1akplI9gjZOx-gHMiadLZojTlY2sYMyveEApLRppP_yJq0' // Key của bạn
-        });
+    prepareMessagingCompat();
 
-        if (currentToken) {
-            console.log("Đã lấy được Token thành công:", currentToken);
-            return currentToken;
+    const strategies = [
+        async () => messaging.getToken({ vapidKey: FCM_VAPID_PUBLIC_KEY, serviceWorkerRegistration: swRegistration }),
+        async () => messaging.getToken({ vapidKey: FCM_VAPID_PUBLIC_KEY }),
+        async () => messaging.getToken()
+    ];
+
+    let lastError = null;
+
+    for (let i = 0; i < strategies.length; i++) {
+        try {
+            const token = await strategies[i]();
+            if (token) return token;
+        } catch (error) {
+            lastError = error;
+            console.warn(`Lấy FCM token thất bại ở chiến lược ${i + 1}:`, error);
         }
-    } catch (err) {
-        console.error("Lỗi lấy Token:", err);
     }
+
+    if (lastError) throw lastError;
+    return null;
 }
 
 function buildPushErrorMessage(error) {
@@ -1693,6 +1698,7 @@ window.addEventListener('DOMContentLoaded', () => {
     }
     updateCurrentUserDisplay();
 });
+
 
 
 
