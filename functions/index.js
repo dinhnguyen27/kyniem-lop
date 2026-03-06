@@ -6,11 +6,9 @@ const db = admin.firestore();
 
 exports.sendPushFromEvent = functions.firestore
   .document('notification_events/{eventId}')
-  .onCreate(async (snap, context) => {
+  .onCreate(async (snap) => {
     const event = snap.data() || {};
     const type = event.type;
-
-    functions.logger.info('Nhận notification event', { eventId: context.params.eventId, type });
 
     if (!type) return null;
 
@@ -23,17 +21,11 @@ exports.sendPushFromEvent = functions.firestore
         .limit(1)
         .get();
 
-      if (userSnap.empty) {
-        functions.logger.warn('Không tìm thấy người nhận để gửi chat push', { receiverEmail });
-        return null;
-      }
+      if (userSnap.empty) return null;
 
       const userData = userSnap.docs[0].data() || {};
       const tokens = Array.isArray(userData.fcmTokens) ? userData.fcmTokens.filter(Boolean) : [];
-      if (!tokens.length) {
-        functions.logger.warn('Người nhận chưa có FCM token', { receiverEmail });
-        return null;
-      }
+      if (!tokens.length) return null;
 
       const senderName = event.senderName || 'Bạn cùng lớp';
       const textPreview = event.textPreview || 'Bạn có tin nhắn mới';
@@ -47,24 +39,8 @@ exports.sendPushFromEvent = functions.firestore
         data: {
           type: 'chat_new_message',
           senderEmail: String(event.senderEmail || ''),
-          receiverEmail,
-          title: `💬 ${senderName} vừa nhắn tin`,
-          body: textPreview
-        },
-        webpush: {
-          headers: {
-            Urgency: 'high'
-          },
-          fcmOptions: {
-            link: 'https://kyniemlop-d3404.web.app/'
-          }
+          receiverEmail
         }
-      });
-
-      functions.logger.info('Kết quả gửi chat push', {
-        receiverEmail,
-        successCount: response.successCount,
-        failureCount: response.failureCount
       });
 
       return cleanupInvalidTokens(userSnap.docs[0].ref, tokens, response.responses);
@@ -83,7 +59,6 @@ exports.sendPushFromEvent = functions.firestore
       });
 
       await Promise.all(sendJobs);
-      functions.logger.info('Đã xử lý gửi capsule push', { users: users.size, jobs: sendJobs.length });
     }
 
     return null;
@@ -97,17 +72,7 @@ async function sendCapsulePush(userRef, tokens, event) {
       body: event.body || 'Có thư mới vừa được mở khóa.'
     },
     data: {
-      type: 'capsule_unlocked',
-      title: '✉️ Hộp thư thời gian mở khóa',
-      body: event.body || 'Có thư mới vừa được mở khóa.'
-    },
-    webpush: {
-      headers: {
-        Urgency: 'high'
-      },
-      fcmOptions: {
-        link: 'https://kyniemlop-d3404.web.app/'
-      }
+      type: 'capsule_unlocked'
     }
   });
 
