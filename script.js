@@ -193,7 +193,7 @@ async function getFcmTokenWithFallback(registration) {
 
         // BƯỚC 2: Sau đó mới gọi getToken
         const currentToken = await messaging.getToken({
-            vapidKey: 'BFrdIOzjp...' // Key của bạn
+            vapidKey: 'BFrdIOzjpU5hTbLY7PrS5LBZUZTFobgNH3jXd5CYu1akplI9gjZOx-gHMiadLZojTlY2sYMyveEApLRppP_yJq0' // Key của bạn
         });
 
         if (currentToken) {
@@ -1693,6 +1693,7 @@ window.addEventListener('DOMContentLoaded', () => {
     }
     updateCurrentUserDisplay();
 });
+
 
 
 
