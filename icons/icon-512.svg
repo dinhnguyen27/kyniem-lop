@@ -9,7 +9,7 @@
   <rect width="512" height="512" fill="url(#bg512)"/>
 
   <text x="70" y="258" font-size="170" font-family="'Brush Script MT', 'Segoe Script', cursive" fill="#111">Ak</text>
-  <text x="240" y="258" font-size="148" font-family="'Times New Roman', serif" font-style="italic" fill="#111">16</text>
+  <text x="290" y="258" font-size="148" font-family="'Times New Roman', serif" font-style="italic" fill="#111">16</text>
 
   <g fill="#a8a8a8" transform="translate(377 170)">
     <circle cx="0" cy="-46" r="5"/>
