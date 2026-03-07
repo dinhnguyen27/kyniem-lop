@@ -1613,6 +1613,13 @@ function filterCapsules() {
 // Khai báo biến giới hạn cho phần Grid bên dưới
 let limitCount = 6; 
 
+function getFeaturedCarouselLimit() {
+    const width = window.innerWidth || 390;
+    if (width <= 420) return 4;
+    if (width <= 560) return 5;
+    return 6;
+}
+
 function loadTimeCapsuleMessages() {
     const today = new Date().toLocaleDateString('sv-SE');
 
@@ -1638,27 +1645,25 @@ function loadTimeCapsuleMessages() {
             return isALocked ? 1 : -1;
         });
 
-        // --- PHẦN 1: RENDER VÒNG QUAY (TOP 6) ---
+         // --- PHẦN 1: RENDER VÒNG QUAY (TOP N linh hoạt theo màn hình) ---
         if (carouselDiv) {
             carouselDiv.innerHTML = "";
-            const top6 = allMessages.slice(0, 6);
-            top6.forEach((data, index) => {
+            const isMobile = window.matchMedia('(max-width: 768px)').matches;
+            const featuredCount = isMobile ? getFeaturedCarouselLimit() : 6;
+            const featuredMessages = allMessages.slice(0, featuredCount);
+
+            featuredMessages.forEach((data, index) => {
                 const isLocked = today < data.unlockDate;
-                // Gọi hàm tạo card chi tiết bên dưới
                 const card = createCardMarkup(data, isLocked); 
                 
-                // Thiết lập vị trí 3D
-                const angleStep = top6.length ? (360 / top6.length) : 60;
+                const angleStep = featuredMessages.length ? (360 / featuredMessages.length) : 60;
                 const angle = index * angleStep;
-                const isMobile = window.matchMedia('(max-width: 768px)').matches;
-                const cardWidth = isMobile ? 140 : 180;
+                const cardWidth = isMobile ? 128 : 180;
                 const containerWidth = carouselDiv.closest('.carousel-3d-container')?.clientWidth || window.innerWidth;
-                const maxRadiusByWidth = Math.floor((containerWidth - cardWidth - 24) / 2);
-                const radius = Math.max(isMobile ? 95 : 120, Math.min(isMobile ? 135 : 180, maxRadiusByWidth));
-
-                // CHỈ DÙNG TRANSFORM ĐỂ ĐỊNH VỊ 3D
-                card.style.transform = `rotateY(${angle}deg) translateZ(${radius}px)`;
+                const maxRadiusByWidth = Math.floor((containerWidth - cardWidth - 18) / 2);
+                const radius = Math.max(isMobile ? 78 : 120, Math.min(isMobile ? 108 : 180, maxRadiusByWidth));
                 
+                card.style.transform = `rotateY(${angle}deg) translateZ(${radius}px)`;       
                 carouselDiv.appendChild(card);
             });
         }
@@ -1847,6 +1852,7 @@ window.addEventListener('DOMContentLoaded', () => {
     }
     updateCurrentUserDisplay();
 });
+
 
 
 
