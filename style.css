@@ -2199,3 +2199,54 @@ header,
         font-size: 0.75rem;
     }
 }
+
+/* ===== Restore 3D featured carousel on mobile (4~6 cards adaptive in JS) ===== */
+@media (max-width: 768px) {
+    .carousel-3d-container {
+        height: 250px;
+        min-height: 250px;
+        padding: 22px 0 8px;
+        margin: 12px 0;
+        overflow: hidden;
+    }
+
+    .carousel-3d-container h3 {
+        position: static;
+        margin: 0 0 8px;
+        font-size: 1rem;
+        z-index: 12;
+    }
+
+    #capsule-carousel-3d {
+        position: absolute;
+        left: 50%;
+        top: 66%;
+        width: 0;
+        height: 0;
+        display: block;
+        overflow: visible;
+        animation: rotateCarousel 22s linear infinite !important;
+        transform-style: preserve-3d;
+        scroll-snap-type: none;
+        -webkit-overflow-scrolling: auto;
+        padding: 0;
+    }
+
+    #capsule-carousel-3d .capsule-card {
+        position: absolute;
+        width: 128px;
+        height: 160px;
+        min-height: 160px;
+        left: -64px;
+        top: -80px;
+        flex: initial;
+        scroll-snap-align: none;
+        margin: 0 !important;
+        transform-origin: center center;
+    }
+
+    #capsule-carousel-3d::-webkit-scrollbar {
+        display: none;
+    }
+}
+
