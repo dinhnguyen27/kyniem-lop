@@ -1,21 +1,25 @@
 {
+  "name": "Kỷ Niệm Lớp Chúng Mình",
   "short_name": "Kỷ Niệm Lớp",
-  "name": "Kỷ Niệm Lớp D3404",
-  "description": "Ứng dụng lưu giữ kỷ niệm lớp chúng mình",
+  "description": "Nơi lưu giữ những khoảnh khắc tuyệt vời của tập thể lớp.",
+  "start_url": "/kyniem-lop/",
+  "scope": "/kyniem-lop/",
+  "display": "standalone",
+  "background_color": "#b8c6e6",
+  "theme_color": "#ff7e5f",
+  "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "icon-192.png",
-      "type": "image/png",
-      "sizes": "192x192"
+      "src": "icons/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
     },
     {
-      "src": "icon-512.png",
-      "type": "image/png",
-      "sizes": "512x512"
+      "src": "icons/icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
     }
-  ],
-  "start_url": ".",
-  "display": "standalone",
-  "theme_color": "#4285f4",
-  "background_color": "#ffffff"
+  ]
 }
