@@ -8,8 +8,8 @@
 
   <rect width="192" height="192" fill="url(#bg192)"/>
 
-  <text x="20" y="98" font-size="60" font-family="'Brush Script MT', 'Segoe Script', cursive" fill="#111">Ak</text>
-  <text x="95" y="98" font-size="50" font-family="'Times New Roman', serif" font-style="italic" fill="#111">16</text>
+  <text x="25" y="98" font-size="60" font-family="'Brush Script MT', 'Segoe Script', cursive" fill="#111">Ak</text>
+  <text x="100" y="98" font-size="50" font-family="'Times New Roman', serif" font-style="italic" fill="#111">16</text>
 
   <g fill="#a8a8a8" transform="translate(140 64)">
     <circle cx="0" cy="-17" r="1.7"/>
