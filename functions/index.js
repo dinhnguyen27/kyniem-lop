@@ -39,6 +39,7 @@ exports.sendPushFromEvent = functions.firestore
 
       const senderName = event.senderName || 'Bạn cùng lớp';
       const textPreview = event.textPreview || 'Bạn có tin nhắn mới';
+      const sentAt = String(event.sentAt || Date.now());
 
       const pushLink = String(event.link || DEFAULT_WEBPUSH_LINK);
 
@@ -53,6 +54,8 @@ exports.sendPushFromEvent = functions.firestore
           receiverEmail,
           title: `💬 ${senderName} vừa nhắn tin`,
           body: textPreview,
+          senderName: String(senderName),
+          sentAt,
           link: pushLink,
           icon: 'https://www.gstatic.com/mobilesdk/160503_mobilesdk/logo/2x/firebase_28dp.png',
           tag: 'chat_new_message'
