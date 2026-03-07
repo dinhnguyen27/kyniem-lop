@@ -568,6 +568,10 @@ function getPrivateConversationRef(emailA, emailB) {
     return db.collection('private_messages').doc(getChatKey(emailA, emailB));
 }
 
+function getPrivateMessagesRef(emailA, emailB) {
+    return getPrivateConversationRef(emailA, emailB).collection('tin_nhan');
+}
+
 function toggleChatPanel() {
     const panel = document.getElementById('chat-panel');
     panel?.classList.toggle('show');
@@ -744,8 +748,6 @@ function loadPrivateMessages() {
     if (!selectedChatUser || !me?.email) return;
 
     const messagesBox = document.getElementById('chat-messages');
-    const conversationRef = getPrivateConversationRef(me.email, selectedChatUser.email);
-
     if (chatUnsubscribe) chatUnsubscribe();
 
     const renderMessages = (snap) => {
@@ -775,7 +777,7 @@ function loadPrivateMessages() {
         messagesBox.scrollTop = messagesBox.scrollHeight;
     };
 
-    chatUnsubscribe = conversationRef.collection('messages')
+    chatUnsubscribe = getPrivateMessagesRef(me.email, selectedChatUser.email)
         .orderBy('createdAt', 'asc')
         .onSnapshot(renderMessages, (error) => {
             console.error('Lỗi tải tin nhắn riêng:', error);
@@ -794,7 +796,7 @@ async function sendPrivateMessage() {
     try {
         const now = Date.now();
         const conversationRef = getPrivateConversationRef(me.email, selectedChatUser.email);
-        const docRef = conversationRef.collection('messages').doc();
+        const docRef = getPrivateMessagesRef(me.email, selectedChatUser.email).doc();
 
         const payload = {
             chatKey: getChatKey(me.email, selectedChatUser.email),
@@ -816,7 +818,8 @@ async function sendPrivateMessage() {
             lastSenderName: payload.senderName,
             lastMessageText: text,
             lastMessageAt: now,
-            updatedAt: now
+            updatedAt: now,
+            messagesPath: `private_messages/${payload.chatKey}/tin_nhan`
         }, { merge: true });
         await batch.commit();
 
@@ -1861,18 +1864,3 @@ window.addEventListener('DOMContentLoaded', () => {
     }
     updateCurrentUserDisplay();
 });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
