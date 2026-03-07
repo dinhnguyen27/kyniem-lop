@@ -83,7 +83,3 @@ self.addEventListener('notificationclick', (event) => {
     await clients.openWindow(targetUrl);
   })());
 });
-
-self.addEventListener('fetch', (event) => {
-    // Để trống cũng được, nhưng cần có listener này để Chrome cho phép cài đặt App
-});
