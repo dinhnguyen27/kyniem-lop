@@ -1,0 +1,21 @@
+{
+  "short_name": "Kỷ Niệm Lớp",
+  "name": "Kỷ Niệm Lớp D3404",
+  "description": "Ứng dụng lưu giữ kỷ niệm lớp chúng mình",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#4285f4",
+  "background_color": "#ffffff"
+}
