@@ -1422,6 +1422,15 @@ video[poster] {
     opacity: .75;
 }
 
+.chat-time-separator {
+    margin: 10px auto 12px;
+    text-align: center;
+    font-size: 0.9rem;
+    color: #d8ddff;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+}
+
 .emoji-toggle-btn {
     border: none;
     background: #ffe7df;
@@ -2341,3 +2350,4 @@ header,
         top: -75px !important;
     }
 }
+
