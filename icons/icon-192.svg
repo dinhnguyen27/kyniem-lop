@@ -1,12 +1,30 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
   <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#ff7e5f"/>
-      <stop offset="100%" stop-color="#ff5f8a"/>
+    <linearGradient id="bg192" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#e3e3e3"/>
+      <stop offset="100%" stop-color="#cfcfcf"/>
     </linearGradient>
   </defs>
-  <rect width="192" height="192" rx="42" fill="url(#g)"/>
-  <circle cx="96" cy="74" r="30" fill="#fff" opacity="0.95"/>
-  <rect x="44" y="114" width="104" height="16" rx="8" fill="#fff" opacity="0.95"/>
-  <rect x="58" y="136" width="76" height="12" rx="6" fill="#fff" opacity="0.85"/>
+
+  <rect width="192" height="192" fill="url(#bg192)"/>
+
+  <text x="38" y="98" font-size="78" font-family="'Brush Script MT', 'Segoe Script', cursive" fill="#111">AK</text>
+  <text x="80" y="98" font-size="70" font-family="'Times New Roman', serif" font-style="italic" fill="#111">16</text>
+
+  <g fill="#a8a8a8" transform="translate(140 64)">
+    <circle cx="0" cy="-17" r="1.7"/>
+    <circle cx="8" cy="-14" r="1.7"/>
+    <circle cx="14" cy="-8" r="1.7"/>
+    <circle cx="17" cy="0" r="1.7"/>
+    <circle cx="14" cy="8" r="1.7"/>
+    <circle cx="8" cy="14" r="1.7"/>
+    <circle cx="0" cy="17" r="1.7"/>
+    <circle cx="-8" cy="14" r="1.7"/>
+    <circle cx="-14" cy="8" r="1.7"/>
+    <circle cx="-17" cy="0" r="1.7"/>
+    <circle cx="-14" cy="-8" r="1.7"/>
+    <circle cx="-8" cy="-14" r="1.7"/>
+  </g>
+
+  <text x="96" y="144" text-anchor="middle" font-size="8" letter-spacing="1.4" font-family="'Arial', sans-serif" fill="#9b9b9b">KHOÁ HỌC 2024 - 2026</text>
 </svg>
