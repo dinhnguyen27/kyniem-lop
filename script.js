@@ -25,6 +25,7 @@ let unlockWatcherInitialized = false;
 let notifiedUnlockIds = new Set(JSON.parse(localStorage.getItem(UNLOCK_NOTIFY_KEY) || '[]'));
 
 const ONLINE_ACTIVE_WINDOW_MS = 120000;
+const PRIVATE_CHAT_LIMIT = 120;
 let presenceInterval = null;
 let usersUnsubscribe = null;
 let recentMessagesUnsubscribe = null;
@@ -753,8 +754,12 @@ function loadPrivateMessages() {
     const renderMessages = (snap) => {
         if (!messagesBox) return;
         const docs = [];
-        snap.forEach((doc) => docs.push(doc.data()));
-        docs.sort((a, b) => Number(a.createdAt || 0) - Number(b.createdAt || 0));
+        snap.forEach((doc) => docs.push({ id: doc.id, ...doc.data() }));
+        docs.sort((a, b) => {
+            const tsDiff = Number(a.createdAt || 0) - Number(b.createdAt || 0);
+            if (tsDiff !== 0) return tsDiff;
+            return String(a.id || '').localeCompare(String(b.id || ''));
+        });
 
         let html = '';
         let latestIncomingTs = 0;
@@ -777,8 +782,13 @@ function loadPrivateMessages() {
         messagesBox.scrollTop = messagesBox.scrollHeight;
     };
 
+    if (messagesBox) {
+        messagesBox.innerHTML = '<p style="color:#888">Đang tải tin nhắn...</p>';
+    }
+
     chatUnsubscribe = getPrivateMessagesRef(me.email, selectedChatUser.email)
-        .orderBy('createdAt', 'asc')
+        .orderBy('createdAt', 'desc')
+        .limit(PRIVATE_CHAT_LIMIT)
         .onSnapshot(renderMessages, (error) => {
             console.error('Lỗi tải tin nhắn riêng:', error);
             if (messagesBox) {
@@ -861,7 +871,7 @@ function escapeHtml(value = '') {
 function formatChatTime(timestamp) {
     if (!timestamp) return '';
     const d = new Date(Number(timestamp));
-    return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+    return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
 function initEmojiPicker() {
