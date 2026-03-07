@@ -2293,3 +2293,51 @@ header,
         top: 67%;
     }
 }
+
+/* ===== Final mobile featured-card anti-overflow override ===== */
+@media (max-width: 768px) {
+    .carousel-3d-container {
+        height: 300px !important;
+        min-height: 300px !important;
+        padding: 16px 0 18px !important;
+        margin: 10px auto 22px !important;
+        overflow: hidden !important;
+    }
+
+    .carousel-3d-container > h3 {
+        margin: 0 0 10px !important;
+    }
+
+    #capsule-carousel-3d {
+        top: 62% !important;
+        left: 50% !important;
+    }
+
+    #capsule-carousel-3d .capsule-card {
+        width: 126px !important;
+        height: 156px !important;
+        min-height: 156px !important;
+        left: -63px !important;
+        top: -78px !important;
+        overflow: hidden !important;
+    }
+}
+
+@media (max-width: 420px) {
+    .carousel-3d-container {
+        height: 288px !important;
+        min-height: 288px !important;
+    }
+
+    #capsule-carousel-3d {
+        top: 61% !important;
+    }
+
+    #capsule-carousel-3d .capsule-card {
+        width: 120px !important;
+        height: 150px !important;
+        min-height: 150px !important;
+        left: -60px !important;
+        top: -75px !important;
+    }
+}
