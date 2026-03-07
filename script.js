@@ -564,6 +564,10 @@ function getChatKey(emailA, emailB) {
     return [emailA, emailB].map((s) => (s || '').toLowerCase()).sort().join('__');
 }
 
+function getPrivateConversationRef(emailA, emailB) {
+    return db.collection('private_messages').doc(getChatKey(emailA, emailB));
+}
+
 function toggleChatPanel() {
     const panel = document.getElementById('chat-panel');
     panel?.classList.toggle('show');
@@ -640,27 +644,28 @@ function initRecentMessagesRanking() {
 
             snap.forEach((doc) => {
                 const data = doc.data();
-                const sender = (data.senderEmail || '').toLowerCase();
-                const receiver = (data.receiverEmail || '').toLowerCase();
-                const other = sender === myEmail ? receiver : sender;
+                const participants = Array.isArray(data.participants)
+                    ? data.participants.map((value) => (value || '').toLowerCase())
+                    : [];
+                const other = participants.find((email) => email && email !== myEmail);
                 if (!other) return;
 
-                const ts = Number(data.createdAt || 0);
+                const ts = Number(data.lastMessageAt || 0);
                 if (!latest[other] || ts > latest[other]) {
                     latest[other] = ts;
                     latestPreview[other] = {
-                        text: data.text || '',
-                        senderName: data.senderName || '',
-                        isFromMe: sender === myEmail
+                        text: data.lastMessageText || '',
+                        senderName: data.lastSenderName || '',
+                        isFromMe: (data.lastSenderEmail || '').toLowerCase() === myEmail
                     };
                 }
 
                 const lastRead = Number(chatReadState[other] || 0);
-                const isIncoming = receiver === myEmail && sender === other;
+                const isIncoming = (data.lastSenderEmail || '').toLowerCase() === other;
                 const isInOpenChat = selectedChatUser && other === (selectedChatUser.email || '').toLowerCase();
 
                 if (isIncoming && ts > lastRead && !isInOpenChat) {
-                    unread[other] = (unread[other] || 0) + 1;
+                    unread[other] = 1;
                 }
             });
 
@@ -739,7 +744,7 @@ function loadPrivateMessages() {
     if (!selectedChatUser || !me?.email) return;
 
     const messagesBox = document.getElementById('chat-messages');
-    const key = getChatKey(me.email, selectedChatUser.email);
+    const conversationRef = getPrivateConversationRef(me.email, selectedChatUser.email);
 
     if (chatUnsubscribe) chatUnsubscribe();
 
@@ -770,8 +775,8 @@ function loadPrivateMessages() {
         messagesBox.scrollTop = messagesBox.scrollHeight;
     };
 
-    chatUnsubscribe = db.collection('private_messages')
-        .where('chatKey', '==', key)
+    chatUnsubscribe = conversationRef.collection('messages')
+        .orderBy('createdAt', 'asc')
         .onSnapshot(renderMessages, (error) => {
             console.error('Lỗi tải tin nhắn riêng:', error);
             if (messagesBox) {
@@ -787,7 +792,11 @@ async function sendPrivateMessage() {
     if (!me?.email || !selectedChatUser?.email || !text) return;
 
     try {
-        const docRef = await db.collection('private_messages').add({
+        const now = Date.now();
+        const conversationRef = getPrivateConversationRef(me.email, selectedChatUser.email);
+        const docRef = conversationRef.collection('messages').doc();
+
+        const payload = {
             chatKey: getChatKey(me.email, selectedChatUser.email),
             participants: [me.email.toLowerCase(), selectedChatUser.email.toLowerCase()],
             senderEmail: me.email.toLowerCase(),
@@ -795,8 +804,21 @@ async function sendPrivateMessage() {
             senderAvatar: me.avatar || buildAvatarUrl(me.name || me.email),
             receiverEmail: selectedChatUser.email.toLowerCase(),
             text,
-            createdAt: Date.now()
-        });
+            createdAt: now
+        };
+
+        const batch = db.batch();
+        batch.set(docRef, payload);
+        batch.set(conversationRef, {
+            chatKey: payload.chatKey,
+            participants: payload.participants,
+            lastSenderEmail: payload.senderEmail,
+            lastSenderName: payload.senderName,
+            lastMessageText: text,
+            lastMessageAt: now,
+            updatedAt: now
+        }, { merge: true });
+        await batch.commit();
 
         await queueNotificationEvent(`chat_${docRef.id}`, {
             type: 'chat_new_message',
@@ -805,10 +827,15 @@ async function sendPrivateMessage() {
             senderName: me.name || me.email,
             receiverEmail: selectedChatUser.email.toLowerCase(),
             textPreview: text.slice(0, 120),
-            sentAt: Date.now()
+            sentAt: now
         });
         const otherEmail = selectedChatUser.email.toLowerCase();
-        lastMessageAtByEmail[otherEmail] = Date.now();
+        lastMessageAtByEmail[otherEmail] = now;
+        latestMessagePreviewByEmail[otherEmail] = {
+            text,
+            senderName: me.name || me.email,
+            isFromMe: true
+        };
         if (allChatUsers.length) renderChatUsers(allChatUsers);
 
         input.value = '';
@@ -1834,6 +1861,7 @@ window.addEventListener('DOMContentLoaded', () => {
     }
     updateCurrentUserDisplay();
 });
+
 
 
 
