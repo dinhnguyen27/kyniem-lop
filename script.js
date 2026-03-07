@@ -807,6 +807,7 @@ function loadPrivateMessages() {
         let html = '';
         let latestIncomingTs = 0;
         let latestOutgoingTs = 0;
+        let lastRenderedDateKey = '';
 
         docs.forEach((data) => {
             const isMe = (data.senderEmail || '').toLowerCase() === me.email.toLowerCase();
@@ -814,6 +815,12 @@ function loadPrivateMessages() {
             const senderName = escapeHtml(data.senderName || (isMe ? (me.name || 'Bạn') : (selectedChatUser?.name || 'Bạn ấy')));
             const timeText = formatChatTime(data.createdAt);
             const ts = Number(data.createdAt || 0);
+            const dateKey = getChatDateKey(ts);
+
+            if (dateKey && dateKey !== lastRenderedDateKey) {
+                html += `<div class="chat-time-separator">${escapeHtml(formatChatCenterDateTime(ts))}</div>`;
+                lastRenderedDateKey = dateKey;
+            }
 
             if (!isMe && ts > latestIncomingTs) latestIncomingTs = ts;
             if (isMe && ts > latestOutgoingTs) latestOutgoingTs = ts;
@@ -942,6 +949,21 @@ function isSameLocalDate(a, b) {
         && a.getDate() === b.getDate();
 }
 
+function getChatDateKey(timestamp) {
+    const ts = Number(timestamp || 0);
+    if (!ts) return '';
+    const d = new Date(ts);
+    return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+}
+
+function formatChatCenterDateTime(timestamp) {
+    const ts = Number(timestamp || 0);
+    if (!ts) return '';
+    const d = new Date(ts);
+    const timeText = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+    return `${timeText} ${d.getDate()} Tháng ${d.getMonth() + 1}, ${d.getFullYear()}`;
+}
+
 function formatChatRecencyLabel(timestamp) {
     const ts = Number(timestamp || 0);
     if (!ts) return '';
@@ -959,12 +981,7 @@ function formatChatRecencyLabel(timestamp) {
 function formatChatTime(timestamp) {
     if (!timestamp) return '';
     const d = new Date(Number(timestamp));
-    const timeText = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    const recencyLabel = formatChatRecencyLabel(timestamp);
-
-    if (recencyLabel === 'Hôm nay') return timeText;
-    if (recencyLabel === 'Hôm qua') return `Hôm qua ${timeText}`;
-    return `${timeText} ${recencyLabel}`;
+    return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
 function initEmojiPicker() {
