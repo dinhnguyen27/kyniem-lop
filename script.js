@@ -30,12 +30,14 @@ let presenceInterval = null;
 let usersUnsubscribe = null;
 let recentMessagesUnsubscribe = null;
 let chatUnsubscribe = null;
+let chatConversationUnsubscribe = null;
 let selectedChatUser = null;
 let chatUsersCache = [];
 let allChatUsers = [];
 let lastMessageAtByEmail = {};
 let latestMessagePreviewByEmail = {};
 let unreadCountsByEmail = {};
+let lastRemoteReadSyncByEmail = {};
 let chatReadState = JSON.parse(localStorage.getItem(CHAT_READ_KEY) || '{}');
 
 const CHAT_EMOJIS = ['😀','😁','😂','🤣','😊','😍','🥰','😘','😎','🤩','😢','😭','😡','👍','👏','🙏','🔥','🎉','💖','💬','🌸','🎓','🫶','✨'];
@@ -573,6 +575,37 @@ function getPrivateMessagesRef(emailA, emailB) {
     return getPrivateConversationRef(emailA, emailB).collection('tin_nhan');
 }
 
+function getReadMarkerKey(email = '') {
+    return (email || '').toLowerCase().replace(/\./g, ',');
+}
+
+function getReadTimestampFromConversation(data, email) {
+    const key = getReadMarkerKey(email);
+    return Number(data?.readBy?.[key] || 0);
+}
+
+function syncConversationReadState(otherEmail, timestamp = Date.now()) {
+    const me = getCurrentUser();
+    if (!me?.email || !otherEmail) return Promise.resolve();
+
+    const key = (otherEmail || '').toLowerCase();
+    const ts = Number(timestamp || 0);
+    if (!ts || ts <= Number(lastRemoteReadSyncByEmail[key] || 0)) {
+        return Promise.resolve();
+    }
+
+    lastRemoteReadSyncByEmail[key] = ts;
+
+    return getPrivateConversationRef(me.email, otherEmail).set({
+        readBy: {
+            [getReadMarkerKey(me.email)]: ts
+        },
+        updatedAt: Date.now()
+    }, { merge: true }).catch((error) => {
+        console.warn('Không đồng bộ được trạng thái đã xem:', error);
+    });
+}
+
 function toggleChatPanel() {
     const panel = document.getElementById('chat-panel');
     panel?.classList.toggle('show');
@@ -585,6 +618,10 @@ function closePrivateChat() {
     if (chatUnsubscribe) {
         chatUnsubscribe();
         chatUnsubscribe = null;
+    }
+    if (chatConversationUnsubscribe) {
+        chatConversationUnsubscribe();
+        chatConversationUnsubscribe = null;
     }
     const box = document.getElementById('chat-messages');
     if (box) box.innerHTML = '';
@@ -705,7 +742,8 @@ function renderChatUsers(users) {
         const preview = latestMessagePreviewByEmail[emailLower];
         const previewPrefix = preview ? (preview.isFromMe ? 'Bạn: ' : '') : '';
         const previewText = preview?.text ? `${previewPrefix}${preview.text}` : 'Chưa có tin nhắn gần đây';
-        const safePreview = escapeHtml(previewText);
+        const recencyLabel = formatChatRecencyLabel(lastMessageAtByEmail[emailLower]);
+        const safePreview = escapeHtml(recencyLabel ? `${previewText} • ${recencyLabel}` : previewText);
         
         return `<div class="chat-user-item ${online ? 'online' : ''}" onclick="openPrivateChatByEmail('${email}')">
             <span class="dot"></span>
@@ -749,13 +787,18 @@ function loadPrivateMessages() {
     if (!selectedChatUser || !me?.email) return;
 
     const messagesBox = document.getElementById('chat-messages');
-    if (chatUnsubscribe) chatUnsubscribe();
+    const conversationRef = getPrivateConversationRef(me.email, selectedChatUser.email);
 
-    const renderMessages = (snap) => {
+    if (chatUnsubscribe) chatUnsubscribe();
+    if (chatConversationUnsubscribe) chatConversationUnsubscribe();
+
+    let latestDocs = [];
+    let otherReadTs = 0;
+
+    const renderMessages = () => {
         if (!messagesBox) return;
-        const docs = [];
-        snap.forEach((doc) => docs.push({ id: doc.id, ...doc.data() }));
-        docs.sort((a, b) => {
+
+        const docs = [...latestDocs].sort((a, b) => {
             const tsDiff = Number(a.createdAt || 0) - Number(b.createdAt || 0);
             if (tsDiff !== 0) return tsDiff;
             return String(a.id || '').localeCompare(String(b.id || ''));
@@ -763,18 +806,28 @@ function loadPrivateMessages() {
 
         let html = '';
         let latestIncomingTs = 0;
+        let latestOutgoingTs = 0;
+
         docs.forEach((data) => {
             const isMe = (data.senderEmail || '').toLowerCase() === me.email.toLowerCase();
             const safeText = escapeHtml(data.text || '');
             const senderName = escapeHtml(data.senderName || (isMe ? (me.name || 'Bạn') : (selectedChatUser?.name || 'Bạn ấy')));
             const timeText = formatChatTime(data.createdAt);
             const ts = Number(data.createdAt || 0);
+
             if (!isMe && ts > latestIncomingTs) latestIncomingTs = ts;
+            if (isMe && ts > latestOutgoingTs) latestOutgoingTs = ts;
+
             html += `<div class="chat-bubble ${isMe ? 'me' : 'other'}">${safeText}<span class="meta">${senderName} • ${timeText}</span></div>`;
         });
 
+        if (latestOutgoingTs && otherReadTs >= latestOutgoingTs) {
+            html += '<div class="chat-read-receipt" style="text-align:right;color:#9aa2ff;font-size:12px;margin-top:6px;">Đã xem</div>';
+        }
+
         if (latestIncomingTs && selectedChatUser?.email) {
             markChatAsRead(selectedChatUser.email, latestIncomingTs);
+            syncConversationReadState(selectedChatUser.email, latestIncomingTs);
             if (allChatUsers.length) renderChatUsers(allChatUsers);
         }
 
@@ -786,10 +839,22 @@ function loadPrivateMessages() {
         messagesBox.innerHTML = '<p style="color:#888">Đang tải tin nhắn...</p>';
     }
 
+    chatConversationUnsubscribe = conversationRef.onSnapshot((doc) => {
+        const data = doc.data() || {};
+        otherReadTs = getReadTimestampFromConversation(data, selectedChatUser?.email || '');
+        renderMessages();
+    }, (error) => {
+        console.warn('Không tải được trạng thái đã xem của cuộc trò chuyện:', error);
+    });
+
     chatUnsubscribe = getPrivateMessagesRef(me.email, selectedChatUser.email)
         .orderBy('createdAt', 'desc')
         .limit(PRIVATE_CHAT_LIMIT)
-        .onSnapshot(renderMessages, (error) => {
+        .onSnapshot((snap) => {
+            latestDocs = [];
+            snap.forEach((doc) => latestDocs.push({ id: doc.id, ...doc.data() }));
+            renderMessages();
+        }, (error) => {
             console.error('Lỗi tải tin nhắn riêng:', error);
             if (messagesBox) {
                 messagesBox.innerHTML = '<p style="color:#d33">Không tải được tin nhắn. Kiểm tra Firestore rules/index.</p>';
@@ -829,7 +894,10 @@ async function sendPrivateMessage() {
             lastMessageText: text,
             lastMessageAt: now,
             updatedAt: now,
-            messagesPath: `private_messages/${payload.chatKey}/tin_nhan`
+            messagesPath: `private_messages/${payload.chatKey}/tin_nhan`,
+            readBy: {
+                [getReadMarkerKey(payload.senderEmail)]: now
+            }
         }, { merge: true });
         await batch.commit();
 
@@ -868,10 +936,35 @@ function escapeHtml(value = '') {
         .replace(/'/g, '&#039;');
 }
 
+function isSameLocalDate(a, b) {
+    return a.getFullYear() === b.getFullYear()
+        && a.getMonth() === b.getMonth()
+        && a.getDate() === b.getDate();
+}
+
+function formatChatRecencyLabel(timestamp) {
+    const ts = Number(timestamp || 0);
+    if (!ts) return '';
+
+    const now = new Date();
+    const d = new Date(ts);
+    const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+
+    if (isSameLocalDate(d, now)) return 'Hôm nay';
+    if (isSameLocalDate(d, yesterday)) return 'Hôm qua';
+
+    return `${d.getDate()} Tháng ${d.getMonth() + 1}, ${d.getFullYear()}`;
+}
+
 function formatChatTime(timestamp) {
     if (!timestamp) return '';
     const d = new Date(Number(timestamp));
-    return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const timeText = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const recencyLabel = formatChatRecencyLabel(timestamp);
+
+    if (recencyLabel === 'Hôm nay') return timeText;
+    if (recencyLabel === 'Hôm qua') return `Hôm qua ${timeText}`;
+    return `${timeText} ${recencyLabel}`;
 }
 
 function initEmojiPicker() {
@@ -1020,6 +1113,7 @@ async function logoutUser() {
     if (usersUnsubscribe) { usersUnsubscribe(); usersUnsubscribe = null; }
     if (recentMessagesUnsubscribe) { recentMessagesUnsubscribe(); recentMessagesUnsubscribe = null; }
     if (chatUnsubscribe) { chatUnsubscribe(); chatUnsubscribe = null; }
+    if (chatConversationUnsubscribe) { chatConversationUnsubscribe(); chatConversationUnsubscribe = null; }
     const current = getCurrentUser();
     if (current?.email) {
         try {
