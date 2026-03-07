@@ -1787,7 +1787,7 @@ document.addEventListener('keydown', (event) => {
 
 window.addEventListener('click', function(e) {
     const container = document.getElementById('music-container');
-    const btn = document.getElementById('main-music-btn');
+    const btn = document.getElementById('main-music-btn');    
     const options = document.getElementById('music-options');
     const panel = document.getElementById('playlist-panel');
 
@@ -1798,24 +1798,6 @@ window.addEventListener('click', function(e) {
         if (panel) panel.style.display = 'none';
     }
 });
-
-if ('serviceWorker' in navigator) {
-    window.addEventListener('load', function() {
-        // Sử dụng đường dẫn tương đối để chạy tốt trên cả localhost và GitHub Pages
-        const swPath = window.location.pathname.includes('kyniem-lop') 
-            ? '/kyniem-lop/firebase-messaging-sw.js' 
-            : 'firebase-messaging-sw.js';
-
-        navigator.serviceWorker.register(swPath)
-            .then(reg => {
-                console.log('PWA Service Worker đã sẵn sàng với scope:', reg.scope);
-            })
-            .catch(err => {
-                console.error('Lỗi đăng ký PWA Service Worker:', err);
-            });
-    });
-}
-
 
 
 window.addEventListener('DOMContentLoaded', () => {
@@ -1852,6 +1834,7 @@ window.addEventListener('DOMContentLoaded', () => {
     }
     updateCurrentUserDisplay();
 });
+
 
 
 
