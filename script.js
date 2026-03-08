@@ -833,12 +833,18 @@ function renderChatUsers(users) {
         const previewText = preview?.text ? `${previewPrefix}${preview.text}` : 'Chưa có tin nhắn gần đây';
         const recencyLabel = formatChatRecencyLabel(lastMessageAtByEmail[emailLower]);
         const safePreview = escapeHtml(recencyLabel ? `${previewText} • ${recencyLabel}` : previewText);
-        
+        const lastSeen = online ? '' : formatLastSeenLabel(u.lastActiveAt);
+        const statusText = online ? 'Online' : (lastSeen || 'Offline');
+        const statusClass = online ? 'online' : (lastSeen && lastSeen !== 'Offline' ? 'recent' : 'long-offline');
+
         return `<div class="chat-user-item ${online ? 'online' : ''}" onclick="openPrivateChatByEmail('${email}')">
             <span class="dot"></span>
             <img class="comment-avatar" src="${avatar}" alt="avatar">
             <div class="chat-user-texts">
-                <span class="chat-user-label">${u.name || u.email} • ${online ? 'Online' : 'Offline'}</span>
+                <div class="chat-user-head">
+                    <span class="chat-user-label">${u.name || u.email}</span>
+                    <span class="chat-user-status ${statusClass}">${statusText}</span>
+                </div>
                 <span class="chat-user-preview">${safePreview}</span>
             </div>
             <span class="chat-user-unread ${unreadCount > 0 ? 'show' : ''}">${unreadCount > 99 ? '99+' : unreadCount}</span>
@@ -1080,6 +1086,29 @@ function formatChatRecencyLabel(timestamp) {
     if (isSameLocalDate(d, yesterday)) return 'Hôm qua';
 
     return `${d.getDate()} Tháng ${d.getMonth() + 1}, ${d.getFullYear()}`;
+}
+
+function formatLastSeenLabel(lastActiveAt) {
+    const ts = Number(lastActiveAt || 0);
+    if (!ts) return '';
+
+    const diff = Date.now() - ts;
+    if (diff < 0) return 'Offline';
+
+    const minute = 60 * 1000;
+    const hour = 60 * minute;
+    const day = 24 * hour;
+    const week = 7 * day;
+    const month = 30 * day;
+
+    if (diff < minute) return 'Vừa hoạt động';
+    if (diff < hour) return `${Math.max(1, Math.floor(diff / minute))} phút trước`;
+    if (diff < day) return `${Math.max(1, Math.floor(diff / hour))} giờ trước`;
+    if (diff < 2 * day) return 'Hôm qua';
+    if (diff < week) return `${Math.floor(diff / day)} ngày trước`;
+    if (diff < month) return `${Math.floor(diff / week)} tuần trước`;
+
+    return 'Offline';
 }
 
 function formatChatTime(timestamp) {
