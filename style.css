@@ -1323,6 +1323,19 @@ video[poster] {
     border-radius: 10px;
 }
 
+#profile-avatar-file {
+    padding: 8px;
+    background: #fff8f5;
+}
+
+.profile-avatar-hint {
+    margin-top: -4px;
+    margin-bottom: 4px;
+    color: #7f6961;
+    font-size: 0.78rem;
+    line-height: 1.35;
+}
+
 .profile-form button {
     border: none;
     padding: 10px 14px;
@@ -2350,4 +2363,3 @@ header,
         top: -75px !important;
     }
 }
-
