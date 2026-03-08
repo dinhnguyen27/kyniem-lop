@@ -42,6 +42,7 @@ let lastRemoteReadSyncByEmail = {};
 let chatReadState = JSON.parse(localStorage.getItem(CHAT_READ_KEY) || '{}');
 let chatUserSearchKeyword = '';
 let hasUserTypedChatSearch = false;
+let currentOpenedLetter = null;
 
 const CHAT_EMOJIS = ['😀','😁','😂','🤣','😊','😍','🥰','😘','😎','🤩','😢','😭','😡','👍','👏','🙏','🔥','🎉','💖','💬','🌸','🎓','🫶','✨'];
 
@@ -849,17 +850,28 @@ function renderChatUsers(users) {
     }
 }
 
-function openPrivateChatByEmail(email) {
-    selectedChatUser = chatUsersCache.find((u) => (u.email || '').toLowerCase() === (email || '').toLowerCase()) || null;
-    if (!selectedChatUser) return;
+function openPrivateChatWithUser(user) {
+    if (!user?.email) return false;
 
+    selectedChatUser = user;
     const panel = document.getElementById('chat-panel');
+    panel?.classList.add('show');
     panel?.classList.add('in-conversation');
     document.getElementById('emoji-picker')?.classList.remove('show');
     document.getElementById('chat-target-name').textContent = selectedChatUser.name || selectedChatUser.email;
     markChatAsRead(selectedChatUser.email);
     if (allChatUsers.length) renderChatUsers(allChatUsers);
     loadPrivateMessages();
+    return true;
+}
+
+function openPrivateChatByEmail(email) {
+    const user = chatUsersCache.find((u) => (u.email || '').toLowerCase() === (email || '').toLowerCase())
+        || allChatUsers.find((u) => (u.email || '').toLowerCase() === (email || '').toLowerCase())
+        || null;
+    if (!user) return;
+
+    openPrivateChatWithUser(user);
 }
 
 function initPrivateChatUsers() {
@@ -1964,6 +1976,7 @@ async function sendTimeCapsule() {
     try {
         await db.collection("messages").add({
             sender: sender,
+            senderEmail: (user?.email || '').toLowerCase(),
             message: msg,
             unlockDate: unlockDateValue, // Lưu ngày người dùng chọn
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -2113,7 +2126,7 @@ function createCardMarkup(data, isLocked) {
     card.className = `capsule-card ${isLocked ? 'locked' : 'unlocked'}`;
     
     if (!isLocked) {
-        card.onclick = () => openLetter(data.sender, data.unlockDate, data.message);
+        card.onclick = () => openLetter(data);
     }
 
     card.innerHTML = `
@@ -2129,9 +2142,20 @@ function createCardMarkup(data, isLocked) {
                     <div class="timer-label">Mở sau:</div>
                     <div class="timer-countdown-text letter-unlock-countdown" data-unlock-date="${data.unlockDate}"></div>
                 </div>
-            ` : ''}
+            ` : `
+                <button type="button" class="letter-reply-mini-btn">💬 Nhắn người viết</button>
+            `}
         </div>
     `;
+
+    if (!isLocked) {
+        const replyBtn = card.querySelector('.letter-reply-mini-btn');
+        replyBtn?.addEventListener('click', (event) => {
+            event.stopPropagation();
+            openLetter(data);
+            toggleLetterReplyComposer();
+        });
+    }
     return card;
 }
 
@@ -2142,17 +2166,118 @@ function loadMoreCapsules() {
 }
 
 // Hàm mở Modal thư to
-function openLetter(sender, date, message) {
-    document.getElementById('modal-sender').innerText = "Từ: " + sender;
-    document.getElementById('modal-date').innerText = "Ngày hẹn mở: " + date;
+function resetLetterReplyComposer() {
+    const box = document.getElementById('letter-reply-box');
+    const input = document.getElementById('letter-reply-input');
+    if (box) box.style.display = 'none';
+    if (input) input.value = '';
+}
+
+function toggleLetterReplyComposer() {
+    const box = document.getElementById('letter-reply-box');
+    const input = document.getElementById('letter-reply-input');
+    if (!box) return;
+
+    const isVisible = box.style.display === 'block';
+    box.style.display = isVisible ? 'none' : 'block';
+    if (!isVisible) input?.focus();
+}
+
+async function findUserForCapsuleReply(letter) {
+    const senderEmail = (letter?.senderEmail || '').toLowerCase();
+    const senderName = (letter?.sender || '').trim().toLowerCase();
+    const me = getCurrentUser();
+
+    if (senderEmail) {
+        const byEmail = allChatUsers.find((u) => (u.email || '').toLowerCase() === senderEmail);
+        if (byEmail) return byEmail;
+    }
+
+    if (senderName) {
+        const byName = allChatUsers.find((u) => (u.name || '').trim().toLowerCase() === senderName);
+        if (byName) return byName;
+    }
+
+    try {
+        if (senderEmail) {
+            const snapByEmail = await db.collection('users').where('email', '==', senderEmail).limit(1).get();
+            if (!snapByEmail.empty) {
+                return normalizeUserAvatar(snapByEmail.docs[0].data());
+            }
+        }
+
+        if (senderName) {
+            const snapByName = await db.collection('users').where('name', '==', letter.sender).limit(1).get();
+            if (!snapByName.empty) {
+                const found = snapByName.docs.map((d) => normalizeUserAvatar(d.data()))
+                    .find((u) => (u.email || '').toLowerCase() !== (me?.email || '').toLowerCase());
+                if (found) return found;
+            }
+        }
+    } catch (error) {
+        console.warn('Không tìm được người viết thư để nhắn tin:', error);
+    }
+
+    return null;
+}
+
+function buildCapsuleReplyMessage(letter, replyText) {
+    const sender = letter?.sender || 'Bạn';
+    const unlockDate = letter?.unlockDate || '';
+    const letterBody = (letter?.message || '').trim();
+    const myText = (replyText || '').trim();
+
+    const letterPreview = letterBody.length > 220 ? `${letterBody.slice(0, 220)}…` : letterBody;
+    return `📨 Phản hồi thư của ${sender} (${unlockDate})
+“${letterPreview}”
+
+${myText}`.trim();
+}
+
+async function sendReplyToCapsuleAuthor() {
+    const me = getCurrentUser();
+    if (!me?.email) return alert('Bạn cần đăng nhập để gửi tin nhắn.');
+    if (!currentOpenedLetter || !currentOpenedLetter.message) return alert('Không tìm thấy thông tin bức thư để phản hồi.');
+
+    const input = document.getElementById('letter-reply-input');
+    const replyText = input?.value.trim() || '';
+    if (!replyText) return alert('Hãy nhập lời nhắn trước khi gửi.');
+
+    const targetUser = await findUserForCapsuleReply(currentOpenedLetter);
+    if (!targetUser?.email) {
+        return alert('Không tìm thấy tài khoản của người viết thư để mở chat riêng.');
+    }
+
+    if ((targetUser.email || '').toLowerCase() === (me.email || '').toLowerCase()) {
+        return alert('Đây là thư của bạn, không thể tự gửi tin nhắn cho chính mình.');
+    }
+
+    openPrivateChatWithUser(targetUser);
+    closeLetter();
+
+    const chatInput = document.getElementById('chat-input');
+    if (!chatInput) return;
+
+    chatInput.value = buildCapsuleReplyMessage(currentOpenedLetter, replyText);
+    await sendPrivateMessage();
+    resetLetterReplyComposer();
+    showSystemToast(`Đã gửi phản hồi đến ${targetUser.name || targetUser.email}`, { icon: '📨', title: 'Phản hồi thư thành công' });
+}
+
+function openLetter(letter) {
+    currentOpenedLetter = letter || null;
+    document.getElementById('modal-sender').innerText = "Từ: " + (letter?.sender || 'Không rõ');
+    document.getElementById('modal-date').innerText = "Ngày hẹn mở: " + (letter?.unlockDate || '---');
     const msgElement = document.getElementById('modal-message');
-    msgElement.innerText = message;
+    msgElement.innerText = letter?.message || '';
+    resetLetterReplyComposer();
     document.getElementById('letter-modal').style.display = 'flex';
 }
 
 // Hàm đóng Modal
 function closeLetter() {
     document.getElementById('letter-modal').style.display = 'none';
+    resetLetterReplyComposer();
 }
     
 // Đóng khi nhấn ra ngoài vùng thư
