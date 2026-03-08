@@ -2554,3 +2554,9 @@ header,
         height: 300px;
     }
 }
+
+.memory-popup-time {
+    font-size: 0.78rem;
+    color: #7e6a63;
+    margin-top: 3px;
+}
