@@ -239,6 +239,13 @@
                 <p id="modal-date" style="font-size: 0.8rem; color: #888;">Ngày mở: ...</p>
                 <hr>
                 <div id="modal-message" class="full-message"></div>
+                <div class="letter-reply-actions">
+                    <button type="button" class="letter-reply-toggle-btn" onclick="toggleLetterReplyComposer()">💬 Gửi tin nhắn đến người viết thư</button>
+                    <div id="letter-reply-box" class="letter-reply-box" style="display:none;">
+                        <textarea id="letter-reply-input" placeholder="Nhắn gì đó với người viết thư..."></textarea>
+                        <button type="button" class="letter-reply-send-btn" onclick="sendReplyToCapsuleAuthor()">Gửi vào trò chuyện riêng</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -259,6 +266,7 @@
     <script src="script.js"></script>
 </body>
 </html>
+
 
 
 
