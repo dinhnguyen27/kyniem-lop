@@ -265,6 +265,7 @@
     border: 1px solid #ddd;
     border-radius: 20px;
     padding: 8px 12px;
+    font-size: 16px;
 }
 
 .chat-input-row button {
@@ -2382,3 +2383,4 @@ header,
     border-color: #ffb7a2;
     box-shadow: 0 0 0 2px rgba(255,126,95,0.16);
 }
+
