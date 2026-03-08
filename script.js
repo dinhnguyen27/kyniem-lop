@@ -43,8 +43,34 @@ let chatReadState = JSON.parse(localStorage.getItem(CHAT_READ_KEY) || '{}');
 let chatUserSearchKeyword = '';
 let hasUserTypedChatSearch = false;
 let currentOpenedLetter = null;
+let memoryMap = null;
+
 
 const CHAT_EMOJIS = ['😀','😁','😂','🤣','😊','😍','🥰','😘','😎','🤩','😢','😭','😡','👍','👏','🙏','🔥','🎉','💖','💬','🌸','🎓','🫶','✨'];
+
+const MEMORY_SPOTS = [
+    {
+        name: 'Quán trà sữa sau giờ học',
+        address: 'Khu vực gần cổng trường',
+        coords: [21.0289, 105.8522],
+        note: 'Nơi cả lớp hay tụ tập làm bài nhóm rồi tám chuyện tới tối.',
+        photo: 'https://picsum.photos/seed/kyniem-tra-sua/420/250'
+    },
+    {
+        name: 'Công viên cuối tuần',
+        address: 'Điểm dã ngoại quen thuộc',
+        coords: [21.0368, 105.8342],
+        note: 'Những buổi chụp ảnh và đá bóng mini của lớp vào cuối tuần.',
+        photo: 'https://picsum.photos/seed/kyniem-cong-vien/420/250'
+    },
+    {
+        name: 'Địa điểm dã ngoại năm cuối',
+        address: 'Chuyến đi kỷ yếu',
+        coords: [21.0181, 105.8198],
+        note: 'Buổi đi chơi đông đủ nhất, lưu lại rất nhiều ảnh kỷ niệm.',
+        photo: 'https://picsum.photos/seed/kyniem-da-ngoai/420/250'
+    }
+];
 
 
 const FCM_TOKEN_KEY = 'class_fcm_token';
@@ -468,6 +494,69 @@ function saveAccounts(accounts) {
 
 function getCurrentUser() {
     return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
+}
+
+function buildMemoryPopupHtml(spot) {
+    const title = escapeHtml(spot.name || 'Địa điểm kỷ niệm');
+    const address = escapeHtml(spot.address || '');
+    const note = escapeHtml(spot.note || '');
+    const photo = escapeHtml(spot.photo || '');
+
+    return `
+        <div class="memory-popup">
+            <img src="${photo}" alt="${title}" loading="lazy">
+            <div class="memory-popup-title">${title}</div>
+            <div class="memory-popup-address">📍 ${address}</div>
+            <div class="memory-popup-note">${note}</div>
+        </div>
+    `;
+}
+
+function initMemoryMap() {
+    const mapEl = document.getElementById('memory-map');
+    if (!mapEl) return;
+
+    if (typeof window.L === 'undefined') {
+        console.warn('Leaflet chưa tải xong, bỏ qua khởi tạo bản đồ kỷ niệm.');
+        return;
+    }
+
+    if (memoryMap) {
+        setTimeout(() => memoryMap.invalidateSize(), 120);
+        return;
+    }
+
+    memoryMap = L.map(mapEl, {
+        zoomControl: true,
+        scrollWheelZoom: false
+    }).setView([21.0285, 105.8542], 13);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(memoryMap);
+
+    const bounds = [];
+    MEMORY_SPOTS.forEach((spot) => {
+        if (!Array.isArray(spot.coords) || spot.coords.length !== 2) return;
+
+        bounds.push(spot.coords);
+        const marker = L.marker(spot.coords, { title: spot.name || 'Địa điểm kỷ niệm' }).addTo(memoryMap);
+        marker.bindPopup(buildMemoryPopupHtml(spot), {
+            maxWidth: 260,
+            className: 'memory-leaflet-popup'
+        });
+    });
+
+    if (bounds.length > 1) {
+        memoryMap.fitBounds(bounds, { padding: [28, 28] });
+    } else if (bounds.length === 1) {
+        memoryMap.setView(bounds[0], 15);
+    }
+
+    mapEl.addEventListener('mouseenter', () => memoryMap?.scrollWheelZoom.enable());
+    mapEl.addEventListener('mouseleave', () => memoryMap?.scrollWheelZoom.disable());
+    setTimeout(() => memoryMap?.invalidateSize(), 160);
 }
 
 function updateCurrentUserDisplay() {
@@ -1247,6 +1336,7 @@ function enterMainSite() {
     });
 
     loadGallery();
+    initMemoryMap();
     startCountdown();
     createLeaves();
     loadTimeCapsuleMessages();
