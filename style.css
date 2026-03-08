@@ -2388,4 +2388,12 @@ header,
     box-shadow: 0 0 0 2px rgba(255,126,95,0.16);
 }
 
+/* Prevent iOS auto-zoom on any text input when keyboard opens */
+@media (max-width: 992px) {
+    input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+    textarea,
+    select {
+        font-size: 16px !important;
+    }
+}
 
