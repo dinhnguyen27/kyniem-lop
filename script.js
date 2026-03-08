@@ -72,6 +72,55 @@ const MEMORY_SPOTS = [
     }
 ];
 
+function parseFirestoreTimestampToMillis(value) {
+    if (!value) return 0;
+    if (typeof value === 'number') return value;
+    if (typeof value?.toMillis === 'function') return Number(value.toMillis() || 0);
+    const seconds = Number(value?.seconds || 0);
+    const nanos = Number(value?.nanoseconds || 0);
+    if (!seconds) return 0;
+    return (seconds * 1000) + Math.floor(nanos / 1e6);
+}
+
+function formatMemoryDateLabel(ts) {
+    const millis = Number(ts || 0);
+    if (!millis) return '';
+    const d = new Date(millis);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('vi-VN');
+}
+
+async function getMemorySpotsFromPosts() {
+    try {
+        const snap = await db.collection('posts').get();
+        const result = [];
+
+        snap.forEach((doc) => {
+            const data = doc.data() || {};
+            const lat = Number(data.locationLat);
+            const lng = Number(data.locationLng);
+            if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+            const takenAtMs = Number(data.takenAt || parseFirestoreTimestampToMillis(data.createdAt));
+            result.push({
+                name: data.locationName || data.caption || 'Địa điểm kỷ niệm',
+                address: data.locationAddress || 'Địa điểm do lớp thêm từ ảnh kỷ niệm',
+                coords: [lat, lng],
+                note: data.memoryNote || data.caption || 'Khoảnh khắc đáng nhớ của lớp.',
+                photo: data.url || 'https://picsum.photos/seed/kyniem-default/420/250',
+                fromPost: true,
+                takenAt: takenAtMs
+            });
+        });
+
+        return result;
+    } catch (error) {
+        console.warn('Không tải được dữ liệu ảnh kỷ niệm để đưa lên bản đồ:', error);
+        return [];
+    }
+}
+
+
 
 const FCM_TOKEN_KEY = 'class_fcm_token';
 const AUTO_PUSH_PROMPT_KEY = 'class_auto_push_prompted';
@@ -501,18 +550,20 @@ function buildMemoryPopupHtml(spot) {
     const address = escapeHtml(spot.address || '');
     const note = escapeHtml(spot.note || '');
     const photo = escapeHtml(spot.photo || '');
+    const dateLabel = escapeHtml(formatMemoryDateLabel(spot.takenAt));
 
     return `
         <div class="memory-popup">
             <img src="${photo}" alt="${title}" loading="lazy">
             <div class="memory-popup-title">${title}</div>
             <div class="memory-popup-address">📍 ${address}</div>
+            ${dateLabel ? `<div class="memory-popup-time">🗓️ ${dateLabel}</div>` : ''}
             <div class="memory-popup-note">${note}</div>
         </div>
     `;
 }
 
-function initMemoryMap() {
+async function initMemoryMap() {
     const mapEl = document.getElementById('memory-map');
     if (!mapEl) return;
 
@@ -521,23 +572,32 @@ function initMemoryMap() {
         return;
     }
 
+    const dynamicSpots = await getMemorySpotsFromPosts();
+    const spots = dynamicSpots.length ? dynamicSpots : MEMORY_SPOTS;
+
     if (memoryMap) {
-        setTimeout(() => memoryMap.invalidateSize(), 120);
-        return;
+        memoryMap.eachLayer((layer) => {
+            if (layer instanceof L.Marker) {
+                memoryMap.removeLayer(layer);
+            }
+        });
+    } else {
+        memoryMap = L.map(mapEl, {
+            zoomControl: true,
+            scrollWheelZoom: false
+        }).setView([21.0285, 105.8542], 13);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(memoryMap);
+
+        mapEl.addEventListener('mouseenter', () => memoryMap?.scrollWheelZoom.enable());
+        mapEl.addEventListener('mouseleave', () => memoryMap?.scrollWheelZoom.disable());
     }
 
-    memoryMap = L.map(mapEl, {
-        zoomControl: true,
-        scrollWheelZoom: false
-    }).setView([21.0285, 105.8542], 13);
-
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(memoryMap);
-
     const bounds = [];
-    MEMORY_SPOTS.forEach((spot) => {
+    spots.forEach((spot) => {
         if (!Array.isArray(spot.coords) || spot.coords.length !== 2) return;
 
         bounds.push(spot.coords);
@@ -554,8 +614,6 @@ function initMemoryMap() {
         memoryMap.setView(bounds[0], 15);
     }
 
-    mapEl.addEventListener('mouseenter', () => memoryMap?.scrollWheelZoom.enable());
-    mapEl.addEventListener('mouseleave', () => memoryMap?.scrollWheelZoom.disable());
     setTimeout(() => memoryMap?.invalidateSize(), 160);
 }
 
