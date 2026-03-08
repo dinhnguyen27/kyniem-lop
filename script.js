@@ -1632,6 +1632,60 @@ document.getElementById('login-password')?.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') checkPassword();
 });
 
+function resizeImageToDataUrl(file, maxSize = 640, quality = 0.85) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            const img = new Image();
+            img.onload = () => {
+                let { width, height } = img;
+                const scale = Math.min(1, maxSize / Math.max(width, height));
+                width = Math.max(1, Math.round(width * scale));
+                height = Math.max(1, Math.round(height * scale));
+
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) {
+                    reject(new Error('Canvas không khả dụng'));
+                    return;
+                }
+
+                ctx.drawImage(img, 0, 0, width, height);
+                resolve(canvas.toDataURL('image/jpeg', quality));
+            };
+            img.onerror = () => reject(new Error('Không đọc được ảnh đã chọn'));
+            img.src = String(reader.result || '');
+        };
+        reader.onerror = () => reject(new Error('Không thể đọc file ảnh'));
+        reader.readAsDataURL(file);
+    });
+}
+
+async function handleProfileAvatarFileChange(event) {
+    const file = event?.target?.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+        alert('Vui lòng chọn file ảnh hợp lệ.');
+        event.target.value = '';
+        return;
+    }
+
+    try {
+        const dataUrl = await resizeImageToDataUrl(file);
+        const avatarInput = document.getElementById('profile-avatar');
+        const preview = document.getElementById('profile-avatar-preview');
+
+        if (avatarInput) avatarInput.value = dataUrl;
+        if (preview) preview.src = dataUrl;
+    } catch (error) {
+        console.error('Lỗi xử lý ảnh avatar:', error);
+        alert('Không thể xử lý ảnh. Vui lòng thử ảnh khác.');
+    }
+}
+
 function openProfileModal() {
     const user = normalizeUserAvatar(getCurrentUser());
     if (!user) return alert('Bạn cần đăng nhập để xem hồ sơ.');
@@ -1641,6 +1695,8 @@ function openProfileModal() {
     document.getElementById('profile-email').value = user.email || '';
     document.getElementById('profile-avatar').value = user.avatar || buildAvatarUrl(user.name);
     document.getElementById('profile-avatar-preview').src = user.avatar || buildAvatarUrl(user.name);
+    const fileInput = document.getElementById('profile-avatar-file');
+    if (fileInput) fileInput.value = '';
     document.getElementById('profile-modal').style.display = 'flex';
 }
 
@@ -1966,6 +2022,9 @@ window.addEventListener('DOMContentLoaded', () => {
         const preview = document.getElementById('profile-avatar-preview');
         if (preview) preview.src = avatarInput.value.trim() || buildAvatarUrl('Avatar');
     });
+
+    const avatarFileInput = document.getElementById('profile-avatar-file');
+    avatarFileInput?.addEventListener('change', handleProfileAvatarFileChange);
 
     if ('Notification' in window && Notification.permission === 'default') {
         Notification.requestPermission().catch(() => {});
