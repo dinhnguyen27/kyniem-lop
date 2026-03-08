@@ -2443,3 +2443,41 @@ header,
     font-weight: 700;
     cursor: pointer;
 }
+
+.chat-user-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.chat-user-status {
+    flex-shrink: 0;
+    font-size: 0.72rem;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-weight: 700;
+    letter-spacing: 0.1px;
+}
+
+.chat-user-status.online {
+    color: #0b7d49;
+    background: rgba(30, 196, 112, 0.14);
+}
+
+.chat-user-status.recent {
+    color: #6b4f0b;
+    background: rgba(255, 180, 0, 0.18);
+}
+
+.chat-user-status.long-offline {
+    color: #7a7a7a;
+    background: rgba(120, 120, 120, 0.16);
+}
+
+@media (max-width: 560px) {
+    .chat-user-status {
+        font-size: 0.68rem;
+        padding: 2px 7px;
+    }
+}
