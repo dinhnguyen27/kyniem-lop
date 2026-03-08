@@ -31,6 +31,7 @@ let usersUnsubscribe = null;
 let recentMessagesUnsubscribe = null;
 let chatUnsubscribe = null;
 let chatConversationUnsubscribe = null;
+let galleryUnsubscribe = null;
 let selectedChatUser = null;
 let chatUsersCache = [];
 let allChatUsers = [];
@@ -585,7 +586,7 @@ async function updateMyPresence() {
 function startPresenceTracking() {
     updateMyPresence();
     if (presenceInterval) clearInterval(presenceInterval);
-    presenceInterval = setInterval(updateMyPresence, 30000);
+    presenceInterval = setInterval(updateMyPresence, 45000);
 }
 
 function stopPresenceTracking() {
@@ -1179,6 +1180,7 @@ async function logoutUser() {
     if (recentMessagesUnsubscribe) { recentMessagesUnsubscribe(); recentMessagesUnsubscribe = null; }
     if (chatUnsubscribe) { chatUnsubscribe(); chatUnsubscribe = null; }
     if (chatConversationUnsubscribe) { chatConversationUnsubscribe(); chatConversationUnsubscribe = null; }
+    if (galleryUnsubscribe) { galleryUnsubscribe(); galleryUnsubscribe = null; }
     const current = getCurrentUser();
     if (current?.email) {
         try {
@@ -1334,6 +1336,15 @@ function toggleMusic() {
     }
 }
 
+function pauseMusicForBackground({ reset = false } = {}) {
+    if (!audio) return;
+    const wasPlaying = !audio.paused;
+
+    audio.pause();
+    if (reset) audio.currentTime = 0;
+    if (wasPlaying || reset) syncMusicUI(false);
+}
+
 function changeMusic() {
     currentSongIndex = (currentSongIndex + 1) % playlist.length;
     playSong(currentSongIndex);
@@ -1355,12 +1366,17 @@ function loadGallery() {
     const gallery = document.getElementById('galleryGrid');
     if (!gallery) return;
 
+    if (galleryUnsubscribe) {
+        galleryUnsubscribe();
+        galleryUnsubscribe = null;
+    }
+
     let query = db.collection("posts").orderBy("createdAt", "desc");
     if (currentYearFilter !== 'all') {
         query = query.where("year", "==", currentYearFilter);
     }
 
-    query.onSnapshot((snapshot) => {
+    galleryUnsubscribe = query.onSnapshot((snapshot) => {
         gallery.innerHTML = ""; 
         snapshot.forEach((doc) => {
             const data = doc.data();
@@ -1455,6 +1471,59 @@ function loadGallery() {
         });
     });
 }
+
+async function syncUserAvatarInAllComments(userEmail, oldName, newName, newAvatar) {
+    const normalizedEmail = (userEmail || '').toLowerCase();
+    if (!normalizedEmail && !oldName && !newName) return;
+
+    try {
+        const postSnap = await db.collection('posts').get();
+        if (postSnap.empty) return;
+
+        const updates = [];
+        postSnap.forEach((doc) => {
+            const data = doc.data();
+            const comments = Array.isArray(data.comments) ? data.comments : [];
+            let changed = false;
+
+            const nextComments = comments.map((comment) => {
+                const commentEmail = (comment?.userEmail || '').toLowerCase();
+                const commentName = comment?.user || '';
+                const isSameUser = (normalizedEmail && commentEmail === normalizedEmail)
+                    || (!!commentName && [oldName, newName].filter(Boolean).includes(commentName));
+
+                if (!isSameUser) return comment;
+
+                changed = true;
+                return {
+                    ...comment,
+                    user: newName || commentName,
+                    userEmail: normalizedEmail || commentEmail,
+                    avatar: newAvatar || comment.avatar || buildAvatarUrl(newName || commentName || 'Thành viên')
+                };
+            });
+
+            if (changed) {
+                updates.push({ docId: doc.id, comments: nextComments });
+            }
+        });
+
+        if (!updates.length) return;
+
+        const chunkSize = 400;
+        for (let i = 0; i < updates.length; i += chunkSize) {
+            const chunk = updates.slice(i, i + chunkSize);
+            const batch = db.batch();
+            chunk.forEach((item) => {
+                batch.update(db.collection('posts').doc(item.docId), { comments: item.comments });
+            });
+            await batch.commit();
+        }
+    } catch (error) {
+        console.warn('Không thể đồng bộ avatar vào bình luận cũ:', error);
+    }
+}
+
 function getUserName() {
     const user = getCurrentUser();
     if (user?.name) return user.name;
@@ -1473,12 +1542,14 @@ async function addComment(postId) {
     const userName = getUserName();
     const currentUser = normalizeUserAvatar(getCurrentUser());
     const avatar = currentUser?.avatar || buildAvatarUrl(userName);
+    const userEmail = (currentUser?.email || '').toLowerCase();
 
     const postRef = db.collection("posts").doc(postId);
     try {
         await postRef.update({
             comments: firebase.firestore.FieldValue.arrayUnion({
                 user: userName, // Sử dụng tên vừa lấy được
+                userEmail,
                 avatar: avatar,
                 text: text,
                 time: Date.now()
@@ -1775,6 +1846,7 @@ function closeProfileModal() {
     const user = normalizeUserAvatar(getCurrentUser());
     if (!user) return;
 
+    const oldName = user.name || '';
     const name = document.getElementById('profile-name').value.trim();
     const phone = document.getElementById('profile-phone').value.trim();
     const avatarInput = document.getElementById('profile-avatar').value.trim();
@@ -1800,6 +1872,7 @@ function closeProfileModal() {
         const updated = { ...user, name, phone, avatar };
         localStorage.setItem(SESSION_KEY, JSON.stringify(updated));
         localStorage.setItem('class_user_name', name);
+        await syncUserAvatarInAllComments(user.email, oldName, name, avatar);
         updateCurrentUserDisplay();
         closeProfileModal();
         alert('Đã cập nhật hồ sơ thành công!');
@@ -2105,7 +2178,22 @@ window.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('online', updateMyPresence);
     window.addEventListener('offline', updateMyPresence);
     document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') updateMyPresence();
+        const hasSession = !!getCurrentUser();
+        if (!hasSession) return;
+
+        if (document.visibilityState === 'visible') {
+            startPresenceTracking();
+            updateMyPresence();
+            return;
+        }
+
+        stopPresenceTracking();
+        pauseMusicForBackground();
+    });
+
+    window.addEventListener('pagehide', () => {
+        stopPresenceTracking();
+        pauseMusicForBackground({ reset: true });
     });
     
     const user = getCurrentUser();
