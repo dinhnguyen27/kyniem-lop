@@ -196,7 +196,7 @@
             <div class="chat-messages" id="chat-messages"></div>
             <div class="chat-input-row">
                 <button class="emoji-toggle-btn" onclick="toggleEmojiPicker()">😊</button>
-                <input id="chat-input" type="text" placeholder="Nhắn gì đó..." onkeypress="if(event.key==='Enter') sendPrivateMessage()">
+                <input id="chat-input" type="text" placeholder="Nhắn gì đó..." autocomplete="off" autocapitalize="sentences" autocorrect="on" enterkeyhint="send" onkeypress="if(event.key==='Enter') sendPrivateMessage()">
                 <button onclick="sendPrivateMessage()">Gửi</button>
             </div>
             <div id="emoji-picker" class="emoji-picker"></div>
@@ -259,5 +259,6 @@
     <script src="script.js"></script>
 </body>
 </html>
+
 
 
