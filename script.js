@@ -41,6 +41,7 @@ let unreadCountsByEmail = {};
 let lastRemoteReadSyncByEmail = {};
 let chatReadState = JSON.parse(localStorage.getItem(CHAT_READ_KEY) || '{}');
 let chatUserSearchKeyword = '';
+let hasUserTypedChatSearch = false;
 
 const CHAT_EMOJIS = ['😀','😁','😂','🤣','😊','😍','🥰','😘','😎','🤩','😢','😭','😡','👍','👏','🙏','🔥','🎉','💖','💬','🌸','🎓','🫶','✨'];
 
@@ -762,6 +763,49 @@ function filterChatUsersByKeyword(users) {
         const name = (u.name || "").toLowerCase();
         return name.includes(keyword);
     });
+}
+
+function clearChatSearchAutofill(chatUserSearchInput) {
+    if (!chatUserSearchInput || hasUserTypedChatSearch) return;
+    if (!chatUserSearchInput.value) return;
+
+    chatUserSearchInput.value = '';
+    chatUserSearchKeyword = '';
+    if (allChatUsers.length) renderChatUsers(allChatUsers);
+}
+
+function setupMobileChatKeyboardBehavior() {
+    const panel = document.getElementById('chat-panel');
+    const chatInput = document.getElementById('chat-input');
+    const viewport = window.visualViewport;
+    if (!panel || !chatInput || !viewport) return;
+
+    const resetPanelPosition = () => {
+        panel.classList.remove('keyboard-open');
+        panel.style.removeProperty('--chat-keyboard-offset');
+    };
+
+    const applyPanelPosition = () => {
+        const isTyping = document.activeElement === chatInput;
+        if (!isTyping) {
+            resetPanelPosition();
+            return;
+        }
+
+        const keyboardHeight = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
+        if (keyboardHeight < 80) {
+            resetPanelPosition();
+            return;
+        }
+
+        panel.classList.add('keyboard-open');
+        panel.style.setProperty('--chat-keyboard-offset', `${keyboardHeight + 10}px`);
+    };
+
+    viewport.addEventListener('resize', applyPanelPosition);
+    viewport.addEventListener('scroll', applyPanelPosition);
+    chatInput.addEventListener('focus', () => setTimeout(applyPanelPosition, 60));
+    chatInput.addEventListener('blur', resetPanelPosition);
 }
 
 function renderChatUsers(users) {
@@ -2166,9 +2210,20 @@ window.addEventListener('DOMContentLoaded', () => {
 
     const chatUserSearchInput = document.getElementById('chat-user-search');
     chatUserSearchInput?.addEventListener('input', (event) => {
+        hasUserTypedChatSearch = true;
         chatUserSearchKeyword = event.target.value || '';
         if (allChatUsers.length) renderChatUsers(allChatUsers);
     });
+
+    chatUserSearchInput?.addEventListener('focus', () => {
+        clearChatSearchAutofill(chatUserSearchInput);
+    });
+
+    clearChatSearchAutofill(chatUserSearchInput);
+    setTimeout(() => clearChatSearchAutofill(chatUserSearchInput), 300);
+    setTimeout(() => clearChatSearchAutofill(chatUserSearchInput), 1200);
+
+    setupMobileChatKeyboardBehavior();
 
     if ('Notification' in window && Notification.permission === 'default') {
         Notification.requestPermission().catch(() => {});
