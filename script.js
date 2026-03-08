@@ -39,6 +39,7 @@ let latestMessagePreviewByEmail = {};
 let unreadCountsByEmail = {};
 let lastRemoteReadSyncByEmail = {};
 let chatReadState = JSON.parse(localStorage.getItem(CHAT_READ_KEY) || '{}');
+let chatUserSearchKeyword = '';
 
 const CHAT_EMOJIS = ['😀','😁','😂','🤣','😊','😍','🥰','😘','😎','🤩','😢','😭','😡','👍','👏','🙏','🔥','🎉','💖','💬','🌸','🎓','🫶','✨'];
 
@@ -128,6 +129,37 @@ async function registerMessagingServiceWorker() {
         try {
             const registration = await navigator.serviceWorker.register(swUrl, { scope: basePath });
             const readyRegistration = await waitForServiceWorkerReady();
+
+            let hasReloaded = false;
+            const reloadOnControllerChange = () => {
+                navigator.serviceWorker.addEventListener('controllerchange', () => {
+                    if (hasReloaded) return;
+                    hasReloaded = true;
+                    window.location.reload();
+                });
+            };
+
+            if (registration.waiting) {
+                reloadOnControllerChange();
+                registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+            }
+
+            registration.addEventListener('updatefound', () => {
+                const worker = registration.installing;
+                if (!worker) return;
+                worker.addEventListener('statechange', () => {
+                    if (worker.state === 'installed' && navigator.serviceWorker.controller) {
+                        reloadOnControllerChange();
+                        worker.postMessage({ type: 'SKIP_WAITING' });
+                    }
+                });
+            });
+
+            if (registration.update) {
+                setTimeout(() => registration.update().catch(() => {}), 3000);
+                setInterval(() => registration.update().catch(() => {}), 5 * 60 * 1000);
+            }
+
             console.info(`FCM Service Worker đã đăng ký: ${swUrl}`);
             return readyRegistration || registration;
         } catch (error) {
@@ -721,6 +753,17 @@ function initRecentMessagesRanking() {
         });
 }
 
+function filterChatUsersByKeyword(users) {
+    const keyword = (chatUserSearchKeyword || "").trim().toLowerCase();
+    if (!keyword) return users;
+
+    return users.filter((u) => {
+        const name = (u.name || "").toLowerCase();
+        const email = (u.email || "").toLowerCase();
+        return name.includes(keyword) || email.includes(keyword);
+    });
+}
+
 function renderChatUsers(users) {
     const list = document.getElementById('chat-users');
     const me = getCurrentUser();
@@ -730,10 +773,11 @@ function renderChatUsers(users) {
         .filter((u) => (u.email || '').toLowerCase() !== me.email.toLowerCase());
 
     const sortedUsers = sortChatUsersByLatest(others);
+    const filteredUsers = filterChatUsersByKeyword(sortedUsers);
 
-    chatUsersCache = sortedUsers;
+    chatUsersCache = filteredUsers;
 
-    list.innerHTML = sortedUsers.map((u) => {
+    list.innerHTML = filteredUsers.map((u) => {
         const online = getOnlineStateFromTimestamp(u.lastActiveAt) && !!u.isOnline;
         const avatar = u.avatar || buildAvatarUrl(u.name || 'Bạn');
         const email = (u.email || '').replace(/'/g, "\'");
@@ -755,6 +799,10 @@ function renderChatUsers(users) {
             <span class="chat-user-unread ${unreadCount > 0 ? 'show' : ''}">${unreadCount > 99 ? '99+' : unreadCount}</span>
         </div>`;
     }).join('');
+
+    if (!filteredUsers.length) {
+        list.innerHTML = '<p style="color:#888;padding:8px 6px;">Không tìm thấy người phù hợp.</p>';
+    }
 }
 
 function openPrivateChatByEmail(email) {
@@ -2043,6 +2091,12 @@ window.addEventListener('DOMContentLoaded', () => {
 
     const avatarFileInput = document.getElementById('profile-avatar-file');
     avatarFileInput?.addEventListener('change', handleProfileAvatarFileChange);
+
+    const chatUserSearchInput = document.getElementById('chat-user-search');
+    chatUserSearchInput?.addEventListener('input', (event) => {
+        chatUserSearchKeyword = event.target.value || '';
+        if (allChatUsers.length) renderChatUsers(allChatUsers);
+    });
 
     if ('Notification' in window && Notification.permission === 'default') {
         Notification.requestPermission().catch(() => {});
