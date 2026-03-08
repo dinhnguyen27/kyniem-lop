@@ -760,8 +760,7 @@ function filterChatUsersByKeyword(users) {
 
     return users.filter((u) => {
         const name = (u.name || "").toLowerCase();
-        const email = (u.email || "").toLowerCase();
-        return name.includes(keyword) || email.includes(keyword);
+        return name.includes(keyword);
     });
 }
 
