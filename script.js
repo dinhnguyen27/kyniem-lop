@@ -1663,6 +1663,15 @@ function resizeImageToDataUrl(file, maxSize = 640, quality = 0.85) {
     });
 }
 
+function fileToDataUrl(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => reject(new Error('Không thể đọc file ảnh gốc'));
+        reader.readAsDataURL(file);
+    });
+}
+
 async function handleProfileAvatarFileChange(event) {
     const file = event?.target?.files?.[0];
     if (!file) return;
@@ -1674,7 +1683,16 @@ async function handleProfileAvatarFileChange(event) {
     }
 
     try {
-        const dataUrl = await resizeImageToDataUrl(file);
+        let dataUrl = '';
+        try {
+            dataUrl = await resizeImageToDataUrl(file);
+        } catch (resizeError) {
+            // Một số thiết bị/iOS (đặc biệt HEIC) có thể không decode được qua canvas.
+            // Fallback: dùng trực tiếp data URL gốc để vẫn upload được.
+            console.warn('Resize ảnh thất bại, dùng ảnh gốc:', resizeError);
+            dataUrl = await fileToDataUrl(file);
+        }
+
         const avatarInput = document.getElementById('profile-avatar');
         const preview = document.getElementById('profile-avatar-preview');
 
@@ -1682,7 +1700,7 @@ async function handleProfileAvatarFileChange(event) {
         if (preview) preview.src = dataUrl;
     } catch (error) {
         console.error('Lỗi xử lý ảnh avatar:', error);
-        alert('Không thể xử lý ảnh. Vui lòng thử ảnh khác.');
+        alert('Không thể xử lý ảnh. Vui lòng thử ảnh khác hoặc dùng link ảnh.');
     }
 }
 
