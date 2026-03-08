@@ -14,7 +14,7 @@ firebase.initializeApp({
 const messaging = firebase.messaging();
 
 
-const APP_CACHE = 'kyniemlop-app-shell-v1';
+const APP_CACHE = 'kyniemlop-app-shell-v3';
 const APP_SHELL_ASSETS = [
   './',
   './index.html',
@@ -48,13 +48,32 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
 
+  const isAppShell = req.mode === 'navigate'
+    || ['/index.html', '/style.css', '/script.js', '/manifest.json'].includes(url.pathname);
+
   event.respondWith((async () => {
+    const cache = await caches.open(APP_CACHE);
+
+    if (isAppShell) {
+      try {
+        const fresh = await fetch(req, { cache: 'no-cache' });
+        cache.put(req, fresh.clone());
+        return fresh;
+      } catch (e) {
+        const cached = await caches.match(req);
+        const fallback = await caches.match('./index.html');
+        return cached || fallback || Response.error();
+      }
+    }
+
     const cached = await caches.match(req);
-    if (cached) return cached;
+    if (cached) {
+      fetch(req).then((fresh) => cache.put(req, fresh.clone())).catch(() => {});
+      return cached;
+    }
 
     try {
       const fresh = await fetch(req);
-      const cache = await caches.open(APP_CACHE);
       cache.put(req, fresh.clone());
       return fresh;
     } catch (e) {
@@ -99,6 +118,12 @@ function safeParsePushData(event) {
     }
   }
 }
+
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
 
 messaging.setBackgroundMessageHandler((payload) => {
   const { title, options } = extractPayload(payload);
