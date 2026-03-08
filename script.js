@@ -93,7 +93,7 @@ function formatMemoryDateLabel(ts) {
 async function getMemorySpotsFromPosts() {
     try {
         const snap = await db.collection('posts').get();
-        const result = [];
+        const grouped = {};
 
         snap.forEach((doc) => {
             const data = doc.data() || {};
@@ -101,19 +101,42 @@ async function getMemorySpotsFromPosts() {
             const lng = Number(data.locationLng);
             if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
 
+            const key = `${lat.toFixed(6)}__${lng.toFixed(6)}`;
             const takenAtMs = Number(data.takenAt || parseFirestoreTimestampToMillis(data.createdAt));
-            result.push({
-                name: data.locationName || data.caption || 'Địa điểm kỷ niệm',
+            const item = {
+                id: doc.id,
+                title: data.locationName || data.caption || 'Địa điểm kỷ niệm',
                 address: data.locationAddress || 'Địa điểm do lớp thêm từ ảnh kỷ niệm',
-                coords: [lat, lng],
                 note: data.memoryNote || data.caption || 'Khoảnh khắc đáng nhớ của lớp.',
                 photo: data.url || 'https://picsum.photos/seed/kyniem-default/420/250',
-                fromPost: true,
                 takenAt: takenAtMs
-            });
+            };
+
+            if (!grouped[key]) {
+                grouped[key] = {
+                    name: item.title,
+                    address: item.address,
+                    coords: [lat, lng],
+                    note: item.note,
+                    photos: [item],
+                    takenAt: item.takenAt,
+                    count: 1,
+                    fromPost: true
+                };
+                return;
+            }
+
+            grouped[key].photos.push(item);
+            grouped[key].count += 1;
+            if (item.takenAt > Number(grouped[key].takenAt || 0)) {
+                grouped[key].takenAt = item.takenAt;
+            }
+            if (grouped[key].name === 'Địa điểm kỷ niệm' && item.title) {
+                grouped[key].name = item.title;
+            }
         });
 
-        return result;
+        return Object.values(grouped);
     } catch (error) {
         console.warn('Không tải được dữ liệu ảnh kỷ niệm để đưa lên bản đồ:', error);
         return [];
@@ -549,16 +572,29 @@ function buildMemoryPopupHtml(spot) {
     const title = escapeHtml(spot.name || 'Địa điểm kỷ niệm');
     const address = escapeHtml(spot.address || '');
     const note = escapeHtml(spot.note || '');
-    const photo = escapeHtml(spot.photo || '');
     const dateLabel = escapeHtml(formatMemoryDateLabel(spot.takenAt));
+    const photos = Array.isArray(spot.photos) && spot.photos.length
+        ? spot.photos
+        : [{ photo: spot.photo || '', note: spot.note || '', takenAt: spot.takenAt || 0 }];
+
+    const safeCount = Number(spot.count || photos.length || 1);
+    const galleryHtml = photos.slice(0, 6).map((item) => {
+        const safePhoto = escapeHtml(item.photo || '');
+        const safeItemNote = escapeHtml(item.note || '');
+        const safeItemDate = escapeHtml(formatMemoryDateLabel(item.takenAt));
+        return `<div class="memory-popup-card">
+            <img src="${safePhoto}" alt="${title}" loading="lazy">
+            <div class="memory-popup-note">${safeItemNote || note}</div>
+            ${safeItemDate ? `<div class="memory-popup-time">🗓️ ${safeItemDate}</div>` : ''}
+        </div>`;
+    }).join('');
 
     return `
         <div class="memory-popup">
-            <img src="${photo}" alt="${title}" loading="lazy">
-            <div class="memory-popup-title">${title}</div>
+            <div class="memory-popup-title">${title} ${safeCount > 1 ? `(${safeCount} ảnh)` : ''}</div>
             <div class="memory-popup-address">📍 ${address}</div>
-            ${dateLabel ? `<div class="memory-popup-time">🗓️ ${dateLabel}</div>` : ''}
-            <div class="memory-popup-note">${note}</div>
+            ${dateLabel ? `<div class="memory-popup-time">🗓️ Cập nhật gần nhất: ${dateLabel}</div>` : ''}
+            <div class="memory-popup-gallery">${galleryHtml}</div>
         </div>
     `;
 }
@@ -601,7 +637,8 @@ async function initMemoryMap() {
         if (!Array.isArray(spot.coords) || spot.coords.length !== 2) return;
 
         bounds.push(spot.coords);
-        const marker = L.marker(spot.coords, { title: spot.name || 'Địa điểm kỷ niệm' }).addTo(memoryMap);
+        const markerLabel = Number(spot.count || 1) > 1 ? `${spot.name || 'Địa điểm kỷ niệm'} (${spot.count} ảnh)` : (spot.name || 'Địa điểm kỷ niệm');
+        const marker = L.marker(spot.coords, { title: markerLabel }).addTo(memoryMap);
         marker.bindPopup(buildMemoryPopupHtml(spot), {
             maxWidth: 260,
             className: 'memory-leaflet-popup'
