@@ -90,6 +90,72 @@ function formatMemoryDateLabel(ts) {
     return d.toLocaleDateString('vi-VN');
 }
 
+
+function distanceMetersBetweenCoords(a = [], b = []) {
+    const [lat1, lng1] = a.map(Number);
+    const [lat2, lng2] = b.map(Number);
+    if (![lat1, lng1, lat2, lng2].every(Number.isFinite)) return Number.POSITIVE_INFINITY;
+
+    const toRad = (deg) => (deg * Math.PI) / 180;
+    const R = 6371000;
+    const dLat = toRad(lat2 - lat1);
+    const dLng = toRad(lng2 - lng1);
+    const q = Math.sin(dLat / 2) ** 2
+        + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(q));
+}
+
+function mergeNearbyMemorySpots(spots = [], thresholdMeters = 80) {
+    const merged = [];
+
+    spots.forEach((spot) => {
+        const coords = Array.isArray(spot?.coords) ? spot.coords : [];
+        if (coords.length !== 2) return;
+
+        const found = merged.find((item) => {
+            const dist = distanceMetersBetweenCoords(item.coords, coords);
+            return Number.isFinite(dist) && dist <= thresholdMeters;
+        });
+
+        if (!found) {
+            merged.push({
+                ...spot,
+                photos: Array.isArray(spot.photos) ? [...spot.photos] : [],
+                count: Number(spot.count || 1)
+            });
+            return;
+        }
+
+        const existingCount = Number(found.count || 1);
+        const incomingCount = Number(spot.count || 1);
+        const total = existingCount + incomingCount;
+
+        found.coords = [
+            ((Number(found.coords[0]) * existingCount) + (Number(coords[0]) * incomingCount)) / total,
+            ((Number(found.coords[1]) * existingCount) + (Number(coords[1]) * incomingCount)) / total
+        ];
+
+        found.count = total;
+        found.photos = [...(found.photos || []), ...(Array.isArray(spot.photos) ? spot.photos : [])];
+
+        if (Number(spot.takenAt || 0) > Number(found.takenAt || 0)) {
+            found.takenAt = spot.takenAt;
+        }
+
+        if ((!found.name || found.name === 'Địa điểm kỷ niệm') && spot.name) {
+            found.name = spot.name;
+        }
+        if ((!found.address || found.address === 'Địa điểm do lớp thêm từ ảnh kỷ niệm') && spot.address) {
+            found.address = spot.address;
+        }
+        if ((!found.note || found.note === 'Khoảnh khắc đáng nhớ của lớp.') && spot.note) {
+            found.note = spot.note;
+        }
+    });
+
+    return merged;
+}
+
 async function getMemorySpotsFromPosts() {
     try {
         const snap = await db.collection('posts').get();
@@ -136,7 +202,7 @@ async function getMemorySpotsFromPosts() {
             }
         });
 
-        return Object.values(grouped);
+        return mergeNearbyMemorySpots(Object.values(grouped), 80);
     } catch (error) {
         console.warn('Không tải được dữ liệu ảnh kỷ niệm để đưa lên bản đồ:', error);
         return [];
@@ -609,7 +675,8 @@ async function initMemoryMap() {
     }
 
     const dynamicSpots = await getMemorySpotsFromPosts();
-    const spots = dynamicSpots.length ? dynamicSpots : MEMORY_SPOTS;
+    const fallbackSpots = mergeNearbyMemorySpots(MEMORY_SPOTS, 80);
+    const spots = dynamicSpots.length ? dynamicSpots : fallbackSpots;
 
     if (memoryMap) {
         memoryMap.eachLayer((layer) => {
