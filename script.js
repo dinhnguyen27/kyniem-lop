@@ -454,16 +454,28 @@ async function saveFcmTokenForCurrentUser(token) {
         });
         if (matched) targetDocRef = matched.ref;
     }
-
-    if (!targetDocRef) return;
-
-    await targetDocRef.update({
+    const payload = {
         fcmTokens: firebase.firestore.FieldValue.arrayUnion(token),
         // Giữ thêm field legacy để các Cloud Function/phiên bản cũ vẫn lấy được token.
         fcmToken: token,
         fcmUpdatedAt: Date.now(),
         email: normalizedEmail
-    });
+    };
+
+    if (!targetDocRef) {
+        const sessionUser = getCurrentUser() || {};
+        await db.collection('users').add({
+            name: sessionUser.name || normalizedEmail,
+            phone: sessionUser.phone || '',
+            avatar: sessionUser.avatar || buildAvatarUrl(sessionUser.name || normalizedEmail),
+            password: sessionUser.password || '',
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            ...payload
+        });
+        return;
+    }
+
+    await targetDocRef.set(payload, { merge: true });
 }
 
 function parseChatSenderFromTitle(title = '') {
@@ -3062,4 +3074,5 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 window.toggleDarkMode = toggleDarkMode;
+
 
