@@ -167,6 +167,21 @@
             </div>
         </section>
 
+        <section class="group-chat-section" data-aos="fade-up">
+            <div class="group-chat-box">
+                <h2>👥 Nhóm chat chung của lớp</h2>
+                <p>Tất cả thành viên đều có thể nhắn tại đây để trao đổi nhanh.</p>
+                <div id="group-chat-messages" class="group-chat-messages">
+                    <p class="group-chat-empty">Đang tải chat chung...</p>
+                </div>
+                <div class="group-chat-input-row">
+                    <input id="group-chat-input" type="text" placeholder="Nhắn cho cả lớp..." autocomplete="off" />
+                    <button type="button" onclick="sendGroupMessage()">Gửi</button>
+                </div>
+            </div>
+        </section>
+
+
         <div class="year-filter">
             <button class="filter-btn active" onclick="filterByYear('all')">Tất cả</button>
             <button class="filter-btn" onclick="filterByYear('2024')">2024</button>
@@ -277,8 +292,3 @@
     <script src="script.js"></script>
 </body>
 </html>
-
-
-
-
-
