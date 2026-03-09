@@ -434,12 +434,30 @@ async function saveFcmTokenForCurrentUser(token) {
     const user = getCurrentUser();
     if (!user?.email || !token) return;
 
-    const snap = await db.collection('users').where('email', '==', user.email.toLowerCase()).limit(1).get();
-    if (snap.empty) return;
+    const normalizedEmail = String(user.email || '').trim().toLowerCase();
+    if (!normalizedEmail) return;
 
-    await db.collection('users').doc(snap.docs[0].id).update({
+    let targetDocRef = null;
+
+    const exactSnap = await db.collection('users').where('email', '==', normalizedEmail).limit(1).get();
+    if (!exactSnap.empty) {
+        targetDocRef = exactSnap.docs[0].ref;
+    } else {
+        // Fallback cho dữ liệu cũ lưu email chưa normalize (viết hoa/thường lẫn lộn).
+        const allUsersSnap = await db.collection('users').limit(500).get();
+        const matched = allUsersSnap.docs.find((doc) => {
+            const email = String(doc.data()?.email || '').trim().toLowerCase();
+            return email === normalizedEmail;
+        });
+        if (matched) targetDocRef = matched.ref;
+    }
+
+    if (!targetDocRef) return;
+
+    await targetDocRef.update({
         fcmTokens: firebase.firestore.FieldValue.arrayUnion(token),
-        fcmUpdatedAt: Date.now()
+        fcmUpdatedAt: Date.now(),
+        email: normalizedEmail
     });
 }
 
