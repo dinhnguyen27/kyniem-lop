@@ -5,6 +5,7 @@ admin.initializeApp();
 const db = admin.firestore();
 
 const DEFAULT_WEBPUSH_LINK = 'https://dinhnguyen27.github.io/kyniem-lop/';
+const PUSH_REGION = 'asia-southeast1';
 
 function normalizePushLink(value) {
   const raw = String(value || '').trim();
@@ -42,7 +43,7 @@ async function collectGroupRecipientTokens(senderEmail = '') {
   };
 }
 
-exports.sendPushFromEvent = functions.firestore
+exports.sendPushFromEvent = functions.region(PUSH_REGION).firestore
   .document('notification_events/{eventId}')
   .onCreate(async (snap, context) => {
     const event = snap.data() || {};
@@ -135,7 +136,7 @@ exports.sendPushFromEvent = functions.firestore
       });
 
       await Promise.all(sendJobs);
-      functions.logger.info('Đã xử lý gửi capsule push', { users: users.size, jobs: sendJobs.length });
+      functions.logger.info('Đã xử lý gửi capsule push', { users: usersCount, jobs: sendJobs.length });
     }
 
     if (type === 'group_chat_new_message') {
@@ -270,7 +271,7 @@ async function cleanupInvalidTokens(userRef, tokens, responses) {
 }
 
 
-exports.sendGroupPushOnMessageCreate = functions.firestore
+exports.sendGroupPushOnMessageCreate = functions.region(PUSH_REGION).firestore
   .document('group_messages/{messageId}')
   .onCreate(async (snap, context) => {
     const data = snap.data() || {};
@@ -281,7 +282,7 @@ exports.sendGroupPushOnMessageCreate = functions.firestore
 
     const body = `${senderName} đã nhắn tin vào nhóm chat`;
     const textPreview = text ? (text.length > 140 ? `${text.slice(0, 140)}…` : text) : 'Mở ứng dụng để xem chi tiết tin nhắn mới.';
-    const pushLink = normalizePushLink('/#group-chat');
+    const pushLink = normalizePushLink('/');
 
     const { usersCount, uniqueTokens } = await collectGroupRecipientTokens(senderEmail);
     const tokenBatches = chunkArray(uniqueTokens, 500);
