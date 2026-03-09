@@ -2680,6 +2680,7 @@ header,
         bottom: 140px;
     }
 }
+
 /* ===== Group chat layout: vertical like messenger ===== */
 .group-chat-panel .chat-conversation-view {
     display: flex;
@@ -2768,3 +2769,33 @@ body.dark-mode .chat-bubble .meta {
     color: #c3cbe0;
 }
 
+
+.group-chat-message {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.group-chat-message.me {
+    justify-content: flex-end;
+}
+
+.group-chat-message.me .group-chat-avatar {
+    display: none;
+}
+
+.group-chat-avatar {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 1px solid rgba(0,0,0,.08);
+    background: #fff;
+    flex-shrink: 0;
+}
+
+body.dark-mode .group-chat-avatar {
+    border-color: #34415c;
+    background: #1a2233;
+}
