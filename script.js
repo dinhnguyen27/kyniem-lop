@@ -26,6 +26,7 @@ let notifiedUnlockIds = new Set(JSON.parse(localStorage.getItem(UNLOCK_NOTIFY_KE
 
 const ONLINE_ACTIVE_WINDOW_MS = 120000;
 const PRIVATE_CHAT_LIMIT = 120;
+const GROUP_CHAT_LIMIT = 180;
 let presenceInterval = null;
 let usersUnsubscribe = null;
 let recentMessagesUnsubscribe = null;
@@ -45,6 +46,7 @@ let hasUserTypedChatSearch = false;
 let currentOpenedLetter = null;
 let memoryMap = null;
 let pendingScrollPostId = null;
+let groupChatUnsubscribe = null;
 
 
 const CHAT_EMOJIS = ['😀','😁','😂','🤣','😊','😍','🥰','😘','😎','🤩','😢','😭','😡','👍','👏','🙏','🔥','🎉','💖','💬','🌸','🎓','🫶','✨'];
@@ -659,8 +661,8 @@ function buildMemoryPopupHtml(spot) {
         </div>`;
     }).join('');
 
-    const moreButtonHtml = safeCount > 4
-        ? `<button class="memory-popup-more-btn" onclick="openMemorySpotModal('${encodeURIComponent(JSON.stringify(photos))}', '${encodeURIComponent(spot.name || '')}', '${encodeURIComponent(spot.address || '')}', '${encodeURIComponent(spot.note || '')}')">Xem thêm (${safeCount - 4})</button>`
+    const moreButtonHtml = safeCount > 2
+        ? `<button class="memory-popup-more-btn" onclick="openMemorySpotModal('${encodeURIComponent(JSON.stringify(photos))}', '${encodeURIComponent(spot.name || '')}', '${encodeURIComponent(spot.address || '')}', '${encodeURIComponent(spot.note || '')}')">Xem thêm (${safeCount - 2})</button>`
         : '';
 
     return `
@@ -1382,6 +1384,71 @@ async function sendPrivateMessage() {
     }
 }
 
+
+function initGroupChat() {
+    const box = document.getElementById('group-chat-messages');
+    if (!box) return;
+
+    if (groupChatUnsubscribe) {
+        groupChatUnsubscribe();
+        groupChatUnsubscribe = null;
+    }
+
+    groupChatUnsubscribe = db.collection('group_messages')
+        .orderBy('createdAt', 'desc')
+        .limit(GROUP_CHAT_LIMIT)
+        .onSnapshot((snap) => {
+            const docs = snap.docs.slice().reverse();
+            if (!docs.length) {
+                box.innerHTML = '<p class="group-chat-empty">Chưa có tin nhắn chung nào. Hãy mở lời trước nhé ✨</p>';
+                return;
+            }
+
+            const me = getCurrentUser();
+            box.innerHTML = docs.map((doc) => {
+                const data = doc.data() || {};
+                const isMe = (data.senderEmail || '').toLowerCase() === (me?.email || '').toLowerCase();
+                const avatar = escapeHtml(data.senderAvatar || buildAvatarUrl(data.senderName || 'Thành viên'));
+                const senderName = escapeHtml(data.senderName || data.senderEmail || 'Thành viên');
+                const text = escapeHtml(data.text || '');
+                const time = escapeHtml(formatChatTime(data.createdAt));
+                return `<div class="group-chat-item ${isMe ? 'me' : ''}">
+                    <img class="group-chat-avatar" src="${avatar}" alt="${senderName}">
+                    <div class="group-chat-bubble">
+                        <div class="group-chat-meta"><strong>${senderName}</strong> <span>${time}</span></div>
+                        <div class="group-chat-text">${text}</div>
+                    </div>
+                </div>`;
+            }).join('');
+
+            box.scrollTop = box.scrollHeight;
+        }, (error) => {
+            console.warn('Không tải được chat nhóm chung:', error);
+            box.innerHTML = '<p class="group-chat-empty" style="color:#c23">Không thể tải chat chung lúc này.</p>';
+        });
+}
+
+async function sendGroupMessage() {
+    const me = getCurrentUser();
+    const input = document.getElementById('group-chat-input');
+    const text = input?.value.trim();
+    if (!me?.email || !text || !input) return;
+
+    try {
+        await db.collection('group_messages').add({
+            senderEmail: me.email.toLowerCase(),
+            senderName: me.name || me.email,
+            senderAvatar: me.avatar || buildAvatarUrl(me.name || me.email),
+            text,
+            createdAt: Date.now()
+        });
+        input.value = '';
+    } catch (error) {
+        console.error('Không gửi được tin nhắn nhóm chung:', error);
+        alert('Gửi chat chung thất bại. Vui lòng thử lại.');
+    }
+}
+
 function escapeHtml(value = '') {
     return value
         .replace(/&/g, '&amp;')
@@ -1592,6 +1659,7 @@ function enterMainSite() {
     updateCurrentUserDisplay();
     startPresenceTracking();
     initPrivateChatUsers();
+    initGroupChat();
     autoEnablePushIfPossible();
     initAutoPushEnableOnFirstGesture();
 }
@@ -1604,6 +1672,7 @@ async function logoutUser() {
     if (chatUnsubscribe) { chatUnsubscribe(); chatUnsubscribe = null; }
     if (chatConversationUnsubscribe) { chatConversationUnsubscribe(); chatConversationUnsubscribe = null; }
     if (galleryUnsubscribe) { galleryUnsubscribe(); galleryUnsubscribe = null; }
+    if (groupChatUnsubscribe) { groupChatUnsubscribe(); groupChatUnsubscribe = null; }
     const current = getCurrentUser();
     if (current?.email) {
         try {
@@ -1905,6 +1974,7 @@ function loadGallery() {
 window.openMemorySpotModal = openMemorySpotModal;
 window.closeMemorySpotModal = closeMemorySpotModal;
 window.focusGalleryPost = focusGalleryPost;
+window.sendGroupMessage = sendGroupMessage;
 
 async function syncUserAvatarInAllComments(userEmail, oldName, newName, newAvatar) {
     const normalizedEmail = (userEmail || '').toLowerCase();
@@ -2712,6 +2782,11 @@ window.addEventListener('DOMContentLoaded', () => {
     const avatarFileInput = document.getElementById('profile-avatar-file');
     avatarFileInput?.addEventListener('change', handleProfileAvatarFileChange);
 
+    const groupChatInput = document.getElementById('group-chat-input');
+    groupChatInput?.addEventListener('keypress', (event) => {
+        if (event.key === 'Enter') sendGroupMessage();
+    });
+
     const chatUserSearchInput = document.getElementById('chat-user-search');
     chatUserSearchInput?.addEventListener('input', (event) => {
         hasUserTypedChatSearch = true;
@@ -2762,4 +2837,3 @@ window.addEventListener('DOMContentLoaded', () => {
     }
     updateCurrentUserDisplay();
 });
-
