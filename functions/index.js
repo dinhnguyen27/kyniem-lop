@@ -6,6 +6,22 @@ const db = admin.firestore();
 
 const DEFAULT_WEBPUSH_LINK = 'https://dinhnguyen27.github.io/kyniem-lop/';
 
+function normalizePushLink(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return DEFAULT_WEBPUSH_LINK;
+  if (/^https?:\/\//i.test(raw)) return raw;
+  const path = raw.startsWith('/') ? raw.slice(1) : raw;
+  return `${DEFAULT_WEBPUSH_LINK}${path}`;
+}
+
+function chunkArray(items, chunkSize = 500) {
+  const list = Array.isArray(items) ? items : [];
+  const size = Math.max(1, Number(chunkSize) || 500);
+  const chunks = [];
+  for (let i = 0; i < list.length; i += size) chunks.push(list.slice(i, i + size));
+  return chunks;
+}
+
 exports.sendPushFromEvent = functions.firestore
   .document('notification_events/{eventId}')
   .onCreate(async (snap, context) => {
@@ -41,7 +57,7 @@ exports.sendPushFromEvent = functions.firestore
       const textPreview = event.textPreview || 'Bạn có tin nhắn mới';
       const sentAt = String(event.sentAt || Date.now());
 
-      const pushLink = String(event.link || DEFAULT_WEBPUSH_LINK);
+      const pushLink = normalizePushLink(event.link);
 
       const response = await admin.messaging().sendEachForMulticast({
         tokens,
@@ -107,37 +123,45 @@ exports.sendPushFromEvent = functions.firestore
       const senderName = String(event.senderName || 'Bạn cùng lớp');
       const sentAt = String(event.sentAt || Date.now());
       const body = String(event.body || `${senderName} đã nhắn tin vào nhóm chat`);
-      const pushLink = String(event.link || DEFAULT_WEBPUSH_LINK);
+      const pushLink = normalizePushLink(event.link);
 
       const users = await db.collection('users').get();
-      const sendJobs = [];
+      const tokens = [];
 
       users.forEach((doc) => {
         const userData = doc.data() || {};
         const email = String(userData.email || '').toLowerCase();
         if (!email || email === senderEmail) return;
 
-        const tokens = Array.isArray(userData.fcmTokens) ? userData.fcmTokens.filter(Boolean) : [];
-        if (!tokens.length) return;
-
-        sendJobs.push(sendGroupChatPush(doc.ref, tokens, {
-          senderEmail,
-          senderName,
-          sentAt,
-          body,
-          link: pushLink
-        }));
+        const userTokens = Array.isArray(userData.fcmTokens) ? userData.fcmTokens.filter(Boolean) : [];
+        if (!userTokens.length) return;
+        tokens.push(...userTokens);
       });
 
-      await Promise.all(sendJobs);
-      functions.logger.info('Đã xử lý gửi group chat push', { users: users.size, jobs: sendJobs.length, senderEmail });
+      const uniqueTokens = [...new Set(tokens)];
+      const tokenBatches = chunkArray(uniqueTokens, 500);
+
+      await Promise.all(tokenBatches.map((batchTokens) => sendGroupChatPush(batchTokens, {
+        senderEmail,
+        senderName,
+        sentAt,
+        body,
+        link: pushLink
+      })));
+
+      functions.logger.info('Đã xử lý gửi group chat push', {
+        users: users.size,
+        tokenCount: uniqueTokens.length,
+        batches: tokenBatches.length,
+        senderEmail
+      });
     }
 
     return null;
   });
 
 async function sendCapsulePush(userRef, tokens, event) {
-  const pushLink = String(event.link || DEFAULT_WEBPUSH_LINK);
+  const pushLink = normalizePushLink(event.link);
 
   const response = await admin.messaging().sendEachForMulticast({
     tokens,
@@ -172,8 +196,8 @@ async function sendCapsulePush(userRef, tokens, event) {
   return cleanupInvalidTokens(userRef, tokens, response.responses);
 }
 
-async function sendGroupChatPush(userRef, tokens, event) {
-  const pushLink = String(event.link || DEFAULT_WEBPUSH_LINK);
+async function sendGroupChatPush(tokens, event) {
+  const pushLink = normalizePushLink(event.link);
   const senderName = String(event.senderName || 'Bạn cùng lớp');
   const body = String(event.body || `${senderName} đã nhắn tin vào nhóm chat`);
   const senderEmail = String(event.senderEmail || '');
@@ -212,7 +236,7 @@ async function sendGroupChatPush(userRef, tokens, event) {
     }
   });
 
-  return cleanupInvalidTokens(userRef, tokens, response.responses);
+  return response;
 }
 
 async function cleanupInvalidTokens(userRef, tokens, responses) {
@@ -232,4 +256,3 @@ async function cleanupInvalidTokens(userRef, tokens, responses) {
     fcmTokens: admin.firestore.FieldValue.arrayRemove(...invalidTokens)
   });
 }
-
