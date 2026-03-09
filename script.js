@@ -21,6 +21,7 @@ const SESSION_KEY = 'class_current_user';
 const UNLOCK_NOTIFY_KEY = 'class_capsule_notified_unlocks';
 const CHAT_READ_KEY = 'class_chat_read_state';
 const GROUP_CHAT_READ_KEY = 'class_group_chat_last_read';
+const THEME_MODE_KEY = 'class_theme_mode';
 
 let unlockWatcherInitialized = false;
 let notifiedUnlockIds = new Set(JSON.parse(localStorage.getItem(UNLOCK_NOTIFY_KEY) || '[]'));
@@ -76,6 +77,39 @@ const MEMORY_SPOTS = [
         photo: 'https://picsum.photos/seed/kyniem-da-ngoai/420/250'
     }
 ];
+
+function applyTheme(mode) {
+    const body = document.body;
+    if (!body) return;
+
+    const isDark = mode === 'dark';
+    body.classList.toggle('dark-mode', isDark);
+
+    const toggleBtn = document.getElementById('dark-mode-toggle');
+    if (toggleBtn) {
+        toggleBtn.textContent = isDark ? '☀️ Chế độ sáng' : '🌙 Chế độ tối';
+    }
+
+    const metaTheme = document.querySelector('meta[name="theme-color"]');
+    if (metaTheme) {
+        metaTheme.setAttribute('content', isDark ? '#12151d' : '#ff7e5f');
+    }
+}
+
+function initThemeMode() {
+    const savedMode = localStorage.getItem(THEME_MODE_KEY);
+    const systemPrefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const mode = savedMode || (systemPrefersDark ? 'dark' : 'light');
+    applyTheme(mode);
+}
+
+function toggleDarkMode() {
+    const isDark = document.body.classList.contains('dark-mode');
+    const nextMode = isDark ? 'light' : 'dark';
+    localStorage.setItem(THEME_MODE_KEY, nextMode);
+    applyTheme(nextMode);
+}
+
 
 function parseFirestoreTimestampToMillis(value) {
     if (!value) return 0;
@@ -2847,6 +2881,7 @@ window.addEventListener('click', function(e) {
 
 
 window.addEventListener('DOMContentLoaded', () => {
+    initThemeMode();
     initPasswordToggles();
     setupFirebaseMessaging().catch((error) => {
         console.warn('Bỏ qua khởi tạo FCM:', error);
@@ -2920,3 +2955,5 @@ window.addEventListener('DOMContentLoaded', () => {
     }
     updateCurrentUserDisplay();
 });
+
+window.toggleDarkMode = toggleDarkMode;
