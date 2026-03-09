@@ -1603,12 +1603,25 @@ async function sendGroupMessage() {
     try {
         const senderName = me.name || me.email;
 
-        await db.collection('group_messages').add({
+        const sentAt = Date.now();
+        const docRef = await db.collection('group_messages').add({
             senderEmail: me.email.toLowerCase(),
             senderName,
             senderAvatar: me.avatar || buildAvatarUrl(me.name || me.email),
             text,
-            createdAt: Date.now()
+            createdAt: sentAt
+        });
+
+        // Đường dự phòng: nếu trigger group_messages ở backend chưa deploy đồng bộ,
+        // event này vẫn giúp luồng push nhóm chạy qua sendPushFromEvent.
+        await queueNotificationEvent(`group_chat_${docRef.id}`, {
+            type: 'group_chat_new_message',
+            senderEmail: me.email.toLowerCase(),
+            senderName,
+            body: `${senderName} đã nhắn tin vào nhóm chat`,
+            textPreview: text.length > 140 ? `${text.slice(0, 140)}…` : text,
+            sentAt,
+            link: '/'
         });
 
         input.value = '';
