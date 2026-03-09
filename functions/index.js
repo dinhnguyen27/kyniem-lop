@@ -282,7 +282,7 @@ exports.sendGroupPushOnMessageCreate = functions.region(PUSH_REGION).firestore
 
     const body = `${senderName} đã nhắn tin vào nhóm chat`;
     const textPreview = text ? (text.length > 140 ? `${text.slice(0, 140)}…` : text) : 'Mở ứng dụng để xem chi tiết tin nhắn mới.';
-    const pushLink = normalizePushLink('/');
+    const pushLink = normalizePushLink('/#group-chat');
 
     const { usersCount, uniqueTokens } = await collectGroupRecipientTokens(senderEmail);
     const tokenBatches = chunkArray(uniqueTokens, 500);
