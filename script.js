@@ -1626,7 +1626,7 @@ async function sendGroupMessage() {
             body: `${senderName} đã nhắn tin vào nhóm chat`,
             textPreview: text.length > 140 ? `${text.slice(0, 140)}…` : text,
             sentAt,
-            link: '/#group-chat'
+            link: '/'
         });
 
         input.value = '';
@@ -1843,16 +1843,6 @@ async function registerAccount() {
     }
 }
 
-function openGroupChatFromDeepLink() {
-    const hash = (window.location.hash || '').toLowerCase();
-    if (hash !== '#group-chat' && hash !== '#chat-group') return;
-
-    const panel = document.getElementById('group-chat-panel');
-    if (!panel?.classList.contains('show')) {
-        toggleGroupChatPanel();
-    }
-}
-
 function enterMainSite() {
     document.getElementById('password-screen').style.display = 'none';
     document.getElementById('main-content').style.display = 'block';
@@ -1877,7 +1867,6 @@ function enterMainSite() {
     startPresenceTracking();
     initPrivateChatUsers();
     initGroupChat();
-    setTimeout(openGroupChatFromDeepLink, 120);
     autoEnablePushIfPossible();
     initAutoPushEnableOnFirstGesture();
 }
@@ -3029,10 +3018,6 @@ window.addEventListener('DOMContentLoaded', () => {
         navigator.serviceWorker.addEventListener('message', (event) => {
             if (event?.data?.type !== 'OPEN_GROUP_CHAT_FROM_PUSH') return;
 
-            if ((window.location.hash || "").toLowerCase() !== "#group-chat") {
-                window.location.hash = "group-chat";
-            }
-
             const panel = document.getElementById('group-chat-panel');
             if (!panel?.classList.contains('show')) {
                 toggleGroupChatPanel();
@@ -3043,8 +3028,6 @@ window.addEventListener('DOMContentLoaded', () => {
     if ('Notification' in window && Notification.permission === 'default') {
         Notification.requestPermission().catch(() => {});
     }
-
-    window.addEventListener('hashchange', openGroupChatFromDeepLink);
 
     window.addEventListener('online', updateMyPresence);
     window.addEventListener('offline', updateMyPresence);
