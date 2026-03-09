@@ -406,6 +406,12 @@ async function setupFirebaseMessaging() {
                     title: senderName ? `Tin nhắn từ ${senderName}` : 'Tin nhắn mới',
                     meta: formatChatTime(sentAt)
                 });
+            } else if (type === 'group_chat_new_message') {
+                showSystemToast(body, {
+                    icon: '👥',
+                    title: 'Nhóm chat chung',
+                    meta: formatChatTime(sentAt)
+                });
             } else {
                 showSystemToast(body, { icon: '🔔', title });
             }
@@ -1530,13 +1536,25 @@ async function sendGroupMessage() {
     if (!me?.email || !text || !input) return;
 
     try {
-        await db.collection('group_messages').add({
+        const senderName = me.name || me.email;
+
+        const docRef = await db.collection('group_messages').add({
             senderEmail: me.email.toLowerCase(),
-            senderName: me.name || me.email,
+            senderName,
             senderAvatar: me.avatar || buildAvatarUrl(me.name || me.email),
             text,
             createdAt: Date.now()
         });
+
+        await queueNotificationEvent(`group_chat_${docRef.id}`, {
+            type: 'group_chat_new_message',
+            senderEmail: me.email.toLowerCase(),
+            senderName,
+            body: `${senderName} đã nhắn tin vào nhóm chat`,
+            sentAt: Date.now(),
+            link: '/'
+        });
+
         input.value = '';
         document.getElementById('group-emoji-picker')?.classList.remove('show');
     } catch (error) {
