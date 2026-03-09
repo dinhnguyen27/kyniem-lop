@@ -123,6 +123,7 @@ exports.sendPushFromEvent = functions.firestore
       const senderName = String(event.senderName || 'Bạn cùng lớp');
       const sentAt = String(event.sentAt || Date.now());
       const body = String(event.body || `${senderName} đã nhắn tin vào nhóm chat`);
+      const textPreview = String(event.textPreview || 'Mở ứng dụng để xem chi tiết tin nhắn mới.');
       const pushLink = normalizePushLink(event.link);
 
       const users = await db.collection('users').get();
@@ -146,6 +147,7 @@ exports.sendPushFromEvent = functions.firestore
         senderName,
         sentAt,
         body,
+        textPreview,
         link: pushLink
       })));
 
@@ -200,8 +202,10 @@ async function sendGroupChatPush(tokens, event) {
   const pushLink = normalizePushLink(event.link);
   const senderName = String(event.senderName || 'Bạn cùng lớp');
   const body = String(event.body || `${senderName} đã nhắn tin vào nhóm chat`);
+  const textPreview = String(event.textPreview || 'Mở ứng dụng để xem chi tiết tin nhắn mới.');
   const senderEmail = String(event.senderEmail || '');
   const sentAt = String(event.sentAt || Date.now());
+  const notificationTag = `group_chat_new_message_${sentAt}`;
 
   const response = await admin.messaging().sendEachForMulticast({
     tokens,
@@ -212,12 +216,12 @@ async function sendGroupChatPush(tokens, event) {
       type: 'group_chat_new_message',
       senderEmail,
       senderName,
-      title: '👥 Tin nhắn nhóm chat chung',
-      body,
+      title: `👥 ${body}`,
+      body: textPreview,
       sentAt,
       link: pushLink,
       icon: 'https://www.gstatic.com/mobilesdk/160503_mobilesdk/logo/2x/firebase_28dp.png',
-      tag: 'group_chat_new_message'
+      tag: notificationTag
     },
     webpush: {
       headers: {
@@ -228,10 +232,11 @@ async function sendGroupChatPush(tokens, event) {
         link: pushLink
       },
       notification: {
-        title: '👥 Tin nhắn nhóm chat chung',
-        body,
+        title: `👥 ${body}`,
+        body: textPreview,
         icon: 'https://www.gstatic.com/mobilesdk/160503_mobilesdk/logo/2x/firebase_28dp.png',
-        requireInteraction: true
+        requireInteraction: true,
+        tag: notificationTag
       }
     }
   });
