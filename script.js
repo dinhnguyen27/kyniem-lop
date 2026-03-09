@@ -20,6 +20,7 @@ const ACCOUNTS_KEY = 'class_accounts';
 const SESSION_KEY = 'class_current_user';
 const UNLOCK_NOTIFY_KEY = 'class_capsule_notified_unlocks';
 const CHAT_READ_KEY = 'class_chat_read_state';
+const GROUP_CHAT_READ_KEY = 'class_group_chat_last_read';
 
 let unlockWatcherInitialized = false;
 let notifiedUnlockIds = new Set(JSON.parse(localStorage.getItem(UNLOCK_NOTIFY_KEY) || '[]'));
@@ -47,6 +48,7 @@ let currentOpenedLetter = null;
 let memoryMap = null;
 let pendingScrollPostId = null;
 let groupChatUnsubscribe = null;
+let groupChatLastRead = Number(localStorage.getItem(GROUP_CHAT_READ_KEY) || 0);
 
 
 const CHAT_EMOJIS = ['😀','😁','😂','🤣','😊','😍','🥰','😘','😎','🤩','😢','😭','😡','👍','👏','🙏','🔥','🎉','💖','💬','🌸','🎓','🫶','✨'];
@@ -986,6 +988,15 @@ function toggleChatPanel() {
     panel?.classList.toggle('show');
 }
 
+function toggleGroupChatPanel() {
+    const panel = document.getElementById('group-chat-panel');
+    panel?.classList.toggle('show');
+    if (panel?.classList.contains('show')) {
+        markGroupChatAsRead();
+        document.getElementById('group-emoji-picker')?.classList.remove('show');
+    }
+}
+
 function closePrivateChat() {
     const panel = document.getElementById('chat-panel');
     panel?.classList.remove('in-conversation');
@@ -1025,6 +1036,36 @@ function updateGlobalChatUnreadBadge() {
     badge.textContent = senders > 99 ? '99+' : String(senders);
     toggleBtn?.classList.add('has-unread');
     toggleBtn?.setAttribute('aria-label', `Chat (${badge.textContent} người gửi tin nhắn mới)`);
+}
+
+function saveGroupChatReadState() {
+    localStorage.setItem(GROUP_CHAT_READ_KEY, String(groupChatLastRead || 0));
+}
+
+function markGroupChatAsRead(timestamp = Date.now()) {
+    const ts = Number(timestamp || 0);
+    if (!ts) return;
+    groupChatLastRead = Math.max(groupChatLastRead, ts);
+    saveGroupChatReadState();
+    updateGroupChatUnreadBadge(0);
+}
+
+function updateGroupChatUnreadBadge(count = 0) {
+    const badge = document.getElementById('group-chat-unread-badge');
+    const toggleBtn = document.getElementById('group-chat-toggle-btn');
+    const safeCount = Math.max(0, Number(count || 0));
+    if (!badge) return;
+
+    if (safeCount <= 0) {
+        badge.style.display = 'none';
+        badge.textContent = '0';
+        toggleBtn?.classList.remove('has-unread');
+        return;
+    }
+
+    badge.style.display = 'inline-flex';
+    badge.textContent = safeCount > 99 ? '99+' : String(safeCount);
+    toggleBtn?.classList.add('has-unread');
 }
 
 function markChatAsRead(otherEmail, timestamp = Date.now()) {
@@ -1394,37 +1435,57 @@ function initGroupChat() {
         groupChatUnsubscribe = null;
     }
 
+    box.innerHTML = '<p style="color:#888">Đang tải chat chung...</p>';
+
     groupChatUnsubscribe = db.collection('group_messages')
         .orderBy('createdAt', 'desc')
         .limit(GROUP_CHAT_LIMIT)
         .onSnapshot((snap) => {
             const docs = snap.docs.slice().reverse();
             if (!docs.length) {
-                box.innerHTML = '<p class="group-chat-empty">Chưa có tin nhắn chung nào. Hãy mở lời trước nhé ✨</p>';
+                box.innerHTML = '<p style="color:#888">Chưa có tin nhắn nào.</p>';
+                updateGroupChatUnreadBadge(0);
                 return;
             }
 
             const me = getCurrentUser();
-            box.innerHTML = docs.map((doc) => {
+            let unread = 0;
+            let latestIncomingTs = 0;
+            let lastRenderedDateKey = '';
+            const html = docs.map((doc) => {
                 const data = doc.data() || {};
                 const isMe = (data.senderEmail || '').toLowerCase() === (me?.email || '').toLowerCase();
-                const avatar = escapeHtml(data.senderAvatar || buildAvatarUrl(data.senderName || 'Thành viên'));
                 const senderName = escapeHtml(data.senderName || data.senderEmail || 'Thành viên');
                 const text = escapeHtml(data.text || '');
                 const time = escapeHtml(formatChatTime(data.createdAt));
-                return `<div class="group-chat-item ${isMe ? 'me' : ''}">
-                    <img class="group-chat-avatar" src="${avatar}" alt="${senderName}">
-                    <div class="group-chat-bubble">
-                        <div class="group-chat-meta"><strong>${senderName}</strong> <span>${time}</span></div>
-                        <div class="group-chat-text">${text}</div>
-                    </div>
-                </div>`;
+                const ts = Number(data.createdAt || 0);
+                const dateKey = getChatDateKey(ts);
+                if (!isMe && ts > groupChatLastRead) unread += 1;
+                if (!isMe && ts > latestIncomingTs) latestIncomingTs = ts;
+
+                let block = '';
+                if (dateKey && dateKey !== lastRenderedDateKey) {
+                    block += `<div class="chat-time-separator">${escapeHtml(formatChatCenterDateTime(ts))}</div>`;
+                    lastRenderedDateKey = dateKey;
+                }
+
+                block += `<div class="chat-bubble ${isMe ? 'me' : 'other'}">${text}<span class="meta">${senderName} • ${time}</span></div>`;
+                return block;
             }).join('');
 
+            box.innerHTML = html;
+
             box.scrollTop = box.scrollHeight;
+
+            const panel = document.getElementById('group-chat-panel');
+            if (panel?.classList.contains('show') && latestIncomingTs) {
+                markGroupChatAsRead(latestIncomingTs);
+            } else {
+                updateGroupChatUnreadBadge(unread);
+            }
         }, (error) => {
             console.warn('Không tải được chat nhóm chung:', error);
-            box.innerHTML = '<p class="group-chat-empty" style="color:#c23">Không thể tải chat chung lúc này.</p>';
+            box.innerHTML = '<p style="color:#d33">Không tải được chat chung. Kiểm tra Firestore rules/index.</p>';
         });
 }
 
@@ -1443,6 +1504,7 @@ async function sendGroupMessage() {
             createdAt: Date.now()
         });
         input.value = '';
+        document.getElementById('group-emoji-picker')?.classList.remove('show');
     } catch (error) {
         console.error('Không gửi được tin nhắn nhóm chung:', error);
         alert('Gửi chat chung thất bại. Vui lòng thử lại.');
@@ -1524,11 +1586,18 @@ function formatChatTime(timestamp) {
 
 function initEmojiPicker() {
     const picker = document.getElementById('emoji-picker');
+    const groupPicker = document.getElementById('group-emoji-picker');
     if (!picker) return;
 
     picker.innerHTML = CHAT_EMOJIS
         .map((emoji) => `<button class="emoji-item" onclick="appendEmoji('${emoji}')">${emoji}</button>`)
         .join('');
+
+    if (groupPicker) {
+        groupPicker.innerHTML = CHAT_EMOJIS
+            .map((emoji) => `<button class="emoji-item" onclick="appendGroupEmoji('${emoji}')">${emoji}</button>`)
+            .join('');
+    }
 }
 
 function toggleEmojiPicker() {
@@ -1538,6 +1607,18 @@ function toggleEmojiPicker() {
 
 function appendEmoji(emoji) {
     const input = document.getElementById('chat-input');
+    if (!input) return;
+    input.value += emoji;
+    input.focus();
+}
+
+function toggleGroupEmojiPicker() {
+    const picker = document.getElementById('group-emoji-picker');
+    picker?.classList.toggle('show');
+}
+
+function appendGroupEmoji(emoji) {
+    const input = document.getElementById('group-chat-input');
     if (!input) return;
     input.value += emoji;
     input.focus();
@@ -1975,6 +2056,8 @@ window.openMemorySpotModal = openMemorySpotModal;
 window.closeMemorySpotModal = closeMemorySpotModal;
 window.focusGalleryPost = focusGalleryPost;
 window.sendGroupMessage = sendGroupMessage;
+window.toggleGroupChatPanel = toggleGroupChatPanel;
+window.toggleGroupEmojiPicker = toggleGroupEmojiPicker;
 
 async function syncUserAvatarInAllComments(userEmail, oldName, newName, newAvatar) {
     const normalizedEmail = (userEmail || '').toLowerCase();
