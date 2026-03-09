@@ -50,6 +50,7 @@ let memoryMap = null;
 let pendingScrollPostId = null;
 let groupChatUnsubscribe = null;
 let groupChatLastRead = Number(localStorage.getItem(GROUP_CHAT_READ_KEY) || 0);
+let groupChatNotifiedUpToTs = 0;
 
 
 const CHAT_EMOJIS = ['😀','😁','😂','🤣','😊','😍','🥰','😘','😎','🤩','😢','😭','😡','👍','👏','🙏','🔥','🎉','💖','💬','🌸','🎓','🫶','✨'];
@@ -1514,6 +1515,48 @@ function initGroupChat() {
             }).join('');
 
             box.innerHTML = html;
+
+            const latestDoc = docs[docs.length - 1];
+            const latestData = latestDoc?.data?.() || {};
+            const latestTs = Number(latestData.createdAt || 0);
+
+            if (!groupChatNotifiedUpToTs) {
+                groupChatNotifiedUpToTs = latestTs;
+            } else if (latestTs > groupChatNotifiedUpToTs) {
+                const meEmail = (me?.email || '').toLowerCase();
+                const incomingNewMessages = docs
+                    .map((doc) => doc.data() || {})
+                    .filter((msg) => {
+                        const senderEmail = String(msg.senderEmail || '').toLowerCase();
+                        const ts = Number(msg.createdAt || 0);
+                        return senderEmail && senderEmail !== meEmail && ts > groupChatNotifiedUpToTs;
+                    });
+
+                if (incomingNewMessages.length) {
+                    const newestIncoming = incomingNewMessages[incomingNewMessages.length - 1];
+                    const senderName = newestIncoming.senderName || newestIncoming.senderEmail || 'Thành viên';
+                    const toastBody = `${senderName} đã nhắn tin vào nhóm chat`;
+                    const sentAt = Number(newestIncoming.createdAt || Date.now());
+
+                    showSystemToast(toastBody, {
+                        icon: '👥',
+                        title: 'Nhóm chat chung',
+                        meta: formatChatTime(sentAt)
+                    });
+
+                    if ('Notification' in window && Notification.permission === 'granted') {
+                        try {
+                            if (swRegistration?.showNotification) {
+                                swRegistration.showNotification('👥 Tin nhắn nhóm chat chung', { body: toastBody }).catch(() => {});
+                            } else {
+                                new Notification('👥 Tin nhắn nhóm chat chung', { body: toastBody });
+                            }
+                        } catch (_) {}
+                    }
+                }
+
+                groupChatNotifiedUpToTs = latestTs;
+            }
 
             box.scrollTop = box.scrollHeight;
 
