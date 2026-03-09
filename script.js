@@ -645,7 +645,7 @@ function buildMemoryPopupHtml(spot) {
         : [{ photo: spot.photo || '', note: spot.note || '', takenAt: spot.takenAt || 0 }];
 
     const safeCount = Number(spot.count || photos.length || 1);
-    const displayPhotos = photos.slice(0, 4);
+    const displayPhotos = photos.slice(0, 2);
     const galleryHtml = displayPhotos.map((item) => {
         const safePhoto = escapeHtml(item.photo || '');
         const safeItemNote = escapeHtml(item.note || '');
@@ -2762,3 +2762,4 @@ window.addEventListener('DOMContentLoaded', () => {
     }
     updateCurrentUserDisplay();
 });
+
