@@ -149,7 +149,7 @@ exports.sendPushFromEvent = functions.region(PUSH_REGION).firestore
       });
 
       await Promise.all(sendJobs);
-      functions.logger.info('Đã xử lý gửi capsule push', { users: usersCount, jobs: sendJobs.length });
+      functions.logger.info('Đã xử lý gửi capsule push', { users: users.size, jobs: sendJobs.length });
     }
 
     if (type === 'group_chat_new_message') {
@@ -319,4 +319,5 @@ exports.sendGroupPushOnMessageCreate = functions.region(PUSH_REGION).firestore
 
     return null;
   });
+
 
