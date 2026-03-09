@@ -223,7 +223,7 @@ async function sendGroupChatPush(tokens, event) {
       type: 'group_chat_new_message',
       senderEmail,
       senderName,
-      title: `👥 ${body}`,
+      title: body,
       body: textPreview,
       sentAt,
       link: pushLink,
@@ -239,7 +239,7 @@ async function sendGroupChatPush(tokens, event) {
         link: pushLink
       },
       notification: {
-        title: `👥 ${body}`,
+        title: body,
         body: textPreview,
         icon: 'https://www.gstatic.com/mobilesdk/160503_mobilesdk/logo/2x/firebase_28dp.png',
         requireInteraction: true,
