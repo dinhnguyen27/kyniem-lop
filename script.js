@@ -408,9 +408,12 @@ async function setupFirebaseMessaging() {
                     meta: formatChatTime(sentAt)
                 });
             } else if (type === 'group_chat_new_message') {
+                const groupTitle = senderName
+                    ? `${senderName} đã nhắn tin vào nhóm chat`
+                    : 'Có tin nhắn mới trong nhóm chat';
                 showSystemToast(body, {
                     icon: '👥',
-                    title: 'Nhóm chat chung',
+                    title: groupTitle,
                     meta: formatChatTime(sentAt)
                 });
             } else {
@@ -1553,21 +1556,22 @@ function initGroupChat() {
                 if (incomingNewMessages.length) {
                     const newestIncoming = incomingNewMessages[incomingNewMessages.length - 1];
                     const senderName = newestIncoming.senderName || newestIncoming.senderEmail || 'Thành viên';
-                    const toastBody = `${senderName} đã nhắn tin vào nhóm chat`;
+                    const toastTitle = `${senderName} đã nhắn tin vào nhóm chat`;
+                    const previewText = String(newestIncoming.text || '').trim() || 'Mở ứng dụng để xem chi tiết tin nhắn mới.';
                     const sentAt = Number(newestIncoming.createdAt || Date.now());
 
-                    showSystemToast(toastBody, {
+                    showSystemToast(previewText, {
                         icon: '👥',
-                        title: 'Nhóm chat chung',
+                        title: toastTitle,
                         meta: formatChatTime(sentAt)
                     });
 
                     if ('Notification' in window && Notification.permission === 'granted') {
                         try {
                             if (swRegistration?.showNotification) {
-                                swRegistration.showNotification('👥 Tin nhắn nhóm chat chung', { body: toastBody }).catch(() => {});
+                                swRegistration.showNotification(toastTitle, { body: previewText }).catch(() => {});
                             } else {
-                                new Notification('👥 Tin nhắn nhóm chat chung', { body: toastBody });
+                                new Notification(toastTitle, { body: previewText });
                             }
                         } catch (_) {}
                     }
