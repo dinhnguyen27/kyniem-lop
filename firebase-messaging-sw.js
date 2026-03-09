@@ -13,149 +13,215 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-
-const APP_CACHE = 'kyniemlop-app-shell-v3';
+const APP_CACHE = 'kyniemlop-app-shell-v4';
 const APP_SHELL_ASSETS = [
-  './',
-  './index.html',
-  './style.css',
-  './script.js',
-  './manifest.json',
-  './icons/icon-192.svg',
-  './icons/icon-512.svg'
+    './',
+    './index.html',
+    './style.css',
+    './script.js',
+    './manifest.json',
+    './icons/icon-192.svg',
+    './icons/icon-512.svg'
 ];
 
+const DEFAULT_ICON = 'https://www.gstatic.com/mobilesdk/160503_mobilesdk/logo/2x/firebase_28dp.png';
+const recentNotificationKeys = new Map();
+const DEDUPE_WINDOW_MS = 8000;
+
 self.addEventListener('install', (event) => {
-  event.waitUntil((async () => {
-    const cache = await caches.open(APP_CACHE);
-    await cache.addAll(APP_SHELL_ASSETS);
-    await self.skipWaiting();
-  })());
+    event.waitUntil((async () => {
+        const cache = await caches.open(APP_CACHE);
+        await cache.addAll(APP_SHELL_ASSETS);
+        await self.skipWaiting();
+    })());
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil((async () => {
-    const keys = await caches.keys();
-    await Promise.all(keys.filter((k) => k !== APP_CACHE).map((k) => caches.delete(k)));
-    await self.clients.claim();
-  })());
+    event.waitUntil((async () => {
+        const keys = await caches.keys();
+        await Promise.all(keys.filter((k) => k !== APP_CACHE).map((k) => caches.delete(k)));
+        await self.clients.claim();
+    })());
 });
 
 self.addEventListener('fetch', (event) => {
-  const req = event.request;
-  if (req.method !== 'GET') return;
+    const req = event.request;
+    if (req.method !== 'GET') return;
 
-  const url = new URL(req.url);
-  if (url.origin !== self.location.origin) return;
+    const url = new URL(req.url);
+    if (url.origin !== self.location.origin) return;
 
-  const isAppShell = req.mode === 'navigate'
-    || ['/index.html', '/style.css', '/script.js', '/manifest.json'].includes(url.pathname);
+    const isAppShell = req.mode === 'navigate'
+        || ['/index.html', '/style.css', '/script.js', '/manifest.json'].includes(url.pathname);
 
-  event.respondWith((async () => {
-    const cache = await caches.open(APP_CACHE);
+    event.respondWith((async () => {
+        const cache = await caches.open(APP_CACHE);
 
-    if (isAppShell) {
-      try {
-        const fresh = await fetch(req, { cache: 'no-cache' });
-        cache.put(req, fresh.clone());
-        return fresh;
-      } catch (e) {
+        if (isAppShell) {
+            try {
+                const fresh = await fetch(req, { cache: 'no-cache' });
+                cache.put(req, fresh.clone());
+                return fresh;
+            } catch (e) {
+                const cached = await caches.match(req);
+                const fallback = await caches.match('./index.html');
+                return cached || fallback || Response.error();
+            }
+        }
+
         const cached = await caches.match(req);
-        const fallback = await caches.match('./index.html');
-        return cached || fallback || Response.error();
-      }
-    }
+        if (cached) {
+            fetch(req).then((fresh) => cache.put(req, fresh.clone())).catch(() => {});
+            return cached;
+        }
 
-    const cached = await caches.match(req);
-    if (cached) {
-      fetch(req).then((fresh) => cache.put(req, fresh.clone())).catch(() => {});
-      return cached;
-    }
-
-    try {
-      const fresh = await fetch(req);
-      cache.put(req, fresh.clone());
-      return fresh;
-    } catch (e) {
-      const fallback = await caches.match('./index.html');
-      return fallback || Response.error();
-    }
-  })());
+        try {
+            const fresh = await fetch(req);
+            cache.put(req, fresh.clone());
+            return fresh;
+        } catch (e) {
+            const fallback = await caches.match('./index.html');
+            return fallback || Response.error();
+        }
+    })());
 });
 
-function extractPayload(rawPayload) {
-  const payload = rawPayload || {};
-  const data = payload.data || {};
-  const notification = payload.notification || {};
+function normalizeLink(link) {
+    const raw = String(link || '').trim();
+    if (!raw) return self.location.origin + '/';
 
-  const title = notification.title || data.title || 'Thông báo mới';
-  const body = notification.body || data.body || '';
-  const link = data.link || payload.fcmOptions?.link || '/';
-  const icon = notification.icon || data.icon || 'https://www.gstatic.com/mobilesdk/160503_mobilesdk/logo/2x/firebase_28dp.png';
-
-  return {
-    title,
-    options: {
-      body,
-      icon,
-      badge: data.badge || icon,
-      tag: data.tag || data.type || 'class-notification',
-      renotify: true,
-      data: { ...data, link }
+    try {
+        return new URL(raw, self.location.origin).href;
+    } catch (_) {
+        return self.location.origin + '/';
     }
-  };
 }
 
 function safeParsePushData(event) {
-  try {
-    return event?.data?.json?.() || {};
-  } catch (_) {
     try {
-      const text = event?.data?.text?.() || '{}';
-      return JSON.parse(text);
+        return event?.data?.json?.() || {};
     } catch (_) {
-      return {};
+        try {
+            const text = event?.data?.text?.() || '{}';
+            return JSON.parse(text);
+        } catch (_) {
+            return {};
+        }
     }
-  }
+}
+
+function extractPayload(rawPayload) {
+    const payload = rawPayload || {};
+    const data = payload.data || {};
+    const notification = payload.notification || {};
+
+    const type = String(data.type || '').trim();
+    const title = notification.title || data.title || 'Thông báo mới';
+    const body = notification.body || data.body || '';
+    const link = normalizeLink(data.link || payload.fcmOptions?.link || '/');
+    const icon = notification.icon || data.icon || DEFAULT_ICON;
+    const sentAt = Number(data.sentAt || Date.now());
+
+    const defaultOptions = {
+        body,
+        icon,
+        badge: data.badge || icon,
+        tag: data.tag || type || 'class-notification',
+        renotify: true,
+        requireInteraction: type === 'group_chat_new_message',
+        timestamp: sentAt,
+        vibrate: [180, 80, 180],
+        data: { ...data, type, link, sentAt }
+    };
+
+    if (type === 'group_chat_new_message') {
+        defaultOptions.actions = [
+            { action: 'open-group-chat', title: 'Mở chat nhóm' }
+        ];
+    }
+
+    return { title, options: defaultOptions };
+}
+
+function getDedupeKey(title, options = {}) {
+    const data = options.data || {};
+    return [
+        options.tag || '',
+        data.type || '',
+        data.sentAt || '',
+        title || '',
+        options.body || ''
+    ].join('::');
+}
+
+function shouldDisplayNotification(key) {
+    const now = Date.now();
+
+    for (const [savedKey, ts] of recentNotificationKeys.entries()) {
+        if (now - ts > DEDUPE_WINDOW_MS) {
+            recentNotificationKeys.delete(savedKey);
+        }
+    }
+
+    const last = recentNotificationKeys.get(key);
+    if (last && now - last <= DEDUPE_WINDOW_MS) return false;
+
+    recentNotificationKeys.set(key, now);
+    return true;
+}
+
+async function displayNotificationFromPayload(payload) {
+    const { title, options } = extractPayload(payload);
+    const dedupeKey = getDedupeKey(title, options);
+
+    if (!shouldDisplayNotification(dedupeKey)) {
+        return null;
+    }
+
+    return self.registration.showNotification(title, options);
 }
 
 self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
+    if (event.data && event.data.type === 'SKIP_WAITING') {
+        self.skipWaiting();
+    }
 });
 
 messaging.setBackgroundMessageHandler((payload) => {
-  const { title, options } = extractPayload(payload);
-  return self.registration.showNotification(title, options);
+    return displayNotificationFromPayload(payload);
 });
 
 self.addEventListener('push', (event) => {
-  const payload = safeParsePushData(event);
-  const { title, options } = extractPayload(payload);
-
-  event.waitUntil(self.registration.showNotification(title, options));
+    const payload = safeParsePushData(event);
+    event.waitUntil(displayNotificationFromPayload(payload));
 });
 
 self.addEventListener('notificationclick', (event) => {
-  event.notification.close();
+    event.notification.close();
 
-  const data = event.notification?.data || {};
-  const targetUrl = data.link || data.click_action || data.url || '/';
+    const data = event.notification?.data || {};
+    const targetUrl = normalizeLink(data.link || data.click_action || data.url || '/');
 
-  event.waitUntil((async () => {
-    const allClients = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+    event.waitUntil((async () => {
+        const allClients = await clients.matchAll({ type: 'window', includeUncontrolled: true });
 
-    const matched = allClients.find((client) => {
-      if (!client?.url) return false;
-      return client.url.includes(targetUrl) || client.url.includes('/kyniem-lop/');
-    });
+        const matched = allClients.find((client) => {
+            if (!client?.url) return false;
+            return client.url === targetUrl
+                || client.url.startsWith(targetUrl)
+                || client.url.includes('/kyniem-lop/');
+        });
 
-    if (matched) {
-      await matched.focus();
-      return;
-    }
+        if (matched) {
+            await matched.focus();
+            if ('navigate' in matched) {
+                try {
+                    await matched.navigate(targetUrl);
+                } catch (_) {}
+            }
+            return;
+        }
 
-    await clients.openWindow(targetUrl);
-  })());
+        await clients.openWindow(targetUrl);
+    })());
 });
