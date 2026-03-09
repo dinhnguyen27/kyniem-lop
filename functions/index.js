@@ -5,7 +5,6 @@ admin.initializeApp();
 const db = admin.firestore();
 
 const DEFAULT_WEBPUSH_LINK = 'https://dinhnguyen27.github.io/kyniem-lop/';
-const PUSH_REGION = 'asia-southeast1';
 
 function normalizePushLink(value) {
   const raw = String(value || '').trim();
@@ -43,7 +42,7 @@ async function collectGroupRecipientTokens(senderEmail = '') {
   };
 }
 
-exports.sendPushFromEvent = functions.region(PUSH_REGION).firestore
+exports.sendPushFromEvent = functions.firestore
   .document('notification_events/{eventId}')
   .onCreate(async (snap, context) => {
     const event = snap.data() || {};
@@ -136,7 +135,7 @@ exports.sendPushFromEvent = functions.region(PUSH_REGION).firestore
       });
 
       await Promise.all(sendJobs);
-      functions.logger.info('Đã xử lý gửi capsule push', { users: usersCount, jobs: sendJobs.length });
+      functions.logger.info('Đã xử lý gửi capsule push', { users: users.size, jobs: sendJobs.length });
     }
 
     if (type === 'group_chat_new_message') {
@@ -271,7 +270,7 @@ async function cleanupInvalidTokens(userRef, tokens, responses) {
 }
 
 
-exports.sendGroupPushOnMessageCreate = functions.region(PUSH_REGION).firestore
+exports.sendGroupPushOnMessageCreate = functions.firestore
   .document('group_messages/{messageId}')
   .onCreate(async (snap, context) => {
     const data = snap.data() || {};
