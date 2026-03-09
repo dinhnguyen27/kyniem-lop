@@ -459,6 +459,8 @@ async function saveFcmTokenForCurrentUser(token) {
 
     await targetDocRef.update({
         fcmTokens: firebase.firestore.FieldValue.arrayUnion(token),
+        // Giữ thêm field legacy để các Cloud Function/phiên bản cũ vẫn lấy được token.
+        fcmToken: token,
         fcmUpdatedAt: Date.now(),
         email: normalizedEmail
     });
@@ -3060,3 +3062,4 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 window.toggleDarkMode = toggleDarkMode;
+
