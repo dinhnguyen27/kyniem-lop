@@ -2584,73 +2584,73 @@ header,
 }
 
 .memory-popup-card img[onclick] {
-    con trỏ: con trỏ chuột;
+    cursor: pointer;
 }
 
 .memory-popup-more-btn,
 .memory-jump-btn {
-    lề trên: 8px;
-    viền: không có;
+    margin-top: 8px;
+    border: none;
     border-radius: 999px;
-    khoảng đệm: 6px 12px;
+    padding: 6px 12px;
     background: linear-gradient(135deg, #ff7e5f, #ff6a48);
-    màu: #fff;
+    color: #fff;
     font-weight: 600;
-    con trỏ: con trỏ chuột;
+    cursor: pointer;
 }
 
 .memory-jump-btn {
-    chiều rộng: 100%;
+    width: 100%;
 }
 
 .memory-spot-modal {
-    Vị trí: cố định;
-    chèn: 0;
-    Chỉ số z: 4000;
-    hiển thị: không có;
+    position: fixed;
+    inset: 0;
+    z-index: 4000;
+    display: none;
 }
 
 .memory-spot-modal.show {
-    hiển thị: khối;
+    display: block;
 }
 
 .memory-spot-modal-overlay {
-    vị trí: tuyệt đối;
-    chèn: 0;
+    position: absolute;
+    inset: 0;
     background: rgba(0, 0, 0, 0.45);
 }
 
 .memory-spot-modal-content {
-    vị trí: tương đối;
-    Chỉ số z: 1;
-    chiều rộng: tối thiểu (760px, 92vw);
-    chiều cao tối đa: 82vh;
-    lề: 6vh tự động;
-    nền: #fff;
-    độ cong viền: 14px;
-    khoảng đệm: 14px;
+    position: relative;
+    z-index: 1;
+    width: min(760px, 92vw);
+    max-height: 82vh;
+    margin: 6vh auto;
+    background: #fff;
+    border-radius: 14px;
+    padding: 14px;
     overflow-y: auto;
 }
 
 .memory-spot-close {
-    vị trí: tuyệt đối;
-    trên cùng: 8px;
-    bên phải: 8px;
-    viền: không có;
-    nền: trong suốt;
-    cỡ chữ: 1.1rem;
-    con trỏ: con trỏ chuột;
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    border: none;
+    background: transparent;
+    font-size: 1.1rem;
+    cursor: pointer;
 }
 
 .memory-spot-modal-grid {
-    lề trên: 10px;
-    hiển thị: lưới;
+    margin-top: 10px;
+    display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    khoảng cách: 10px;
+    gap: 10px;
 }
 
 .map-post-highlight {
-    hoạt ảnh: mapPostGlow 2s ease;
+    animation: mapPostGlow 2s ease;
 }
 
 @keyframes mapPostGlow {
