@@ -167,21 +167,6 @@
             </div>
         </section>
 
-        <section class="group-chat-section" data-aos="fade-up">
-            <div class="group-chat-box">
-                <h2>👥 Nhóm chat chung của lớp</h2>
-                <p>Tất cả thành viên đều có thể nhắn tại đây để trao đổi nhanh.</p>
-                <div id="group-chat-messages" class="group-chat-messages">
-                    <p class="group-chat-empty">Đang tải chat chung...</p>
-                </div>
-                <div class="group-chat-input-row">
-                    <input id="group-chat-input" type="text" placeholder="Nhắn cho cả lớp..." autocomplete="off" />
-                    <button type="button" onclick="sendGroupMessage()">Gửi</button>
-                </div>
-            </div>
-        </section>
-
-
         <div class="year-filter">
             <button class="filter-btn active" onclick="filterByYear('all')">Tất cả</button>
             <button class="filter-btn" onclick="filterByYear('2024')">2024</button>
@@ -200,6 +185,24 @@
     </div>
 
     <button id="chat-toggle-btn" class="chat-toggle-btn" onclick="toggleChatPanel()"><span class="chat-toggle-icon">💬</span><span class="chat-toggle-label">Chat</span><span id="chat-unread-badge" class="chat-unread-badge" style="display:none">0</span></button>
+    <button id="group-chat-toggle-btn" class="chat-toggle-btn group-chat-toggle-btn" onclick="toggleGroupChatPanel()"><span class="chat-toggle-icon">👥</span><span class="chat-toggle-label">Chat chung</span><span id="group-chat-unread-badge" class="chat-unread-badge" style="display:none">0</span></button>
+
+    <div id="group-chat-panel" class="chat-panel group-chat-panel">
+        <div class="chat-panel-header">
+            <strong>Nhóm chat chung</strong>
+            <button onclick="toggleGroupChatPanel()">✕</button>
+        </div>
+        <div class="chat-conversation-view" style="display:flex;">
+            <div class="chat-messages" id="group-chat-messages"></div>
+            <div class="chat-input-row">
+                <button class="emoji-toggle-btn" onclick="toggleGroupEmojiPicker()">😊</button>
+                <input id="group-chat-input" type="text" placeholder="Nhắn cho cả lớp..." autocomplete="off" autocapitalize="sentences" autocorrect="on" enterkeyhint="send">
+                <button onclick="sendGroupMessage()">Gửi</button>
+            </div>
+            <div id="group-emoji-picker" class="emoji-picker"></div>
+        </div>
+    </div>
+
     <div id="chat-panel" class="chat-panel">
         <div class="chat-panel-header">
             <strong>Trò chuyện riêng</strong>
