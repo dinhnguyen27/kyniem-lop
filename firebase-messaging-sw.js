@@ -204,6 +204,7 @@ self.addEventListener('notificationclick', (event) => {
 
     event.waitUntil((async () => {
         const allClients = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+        const shouldOpenGroupChat = data.type === 'group_chat_new_message' || event.action === 'open-group-chat';
 
         const matched = allClients.find((client) => {
             if (!client?.url) return false;
@@ -219,9 +220,16 @@ self.addEventListener('notificationclick', (event) => {
                     await matched.navigate(targetUrl);
                 } catch (_) {}
             }
+
+            if (shouldOpenGroupChat) {
+                matched.postMessage({ type: 'OPEN_GROUP_CHAT_FROM_PUSH' });
+            }
             return;
         }
 
-        await clients.openWindow(targetUrl);
+        const newClient = await clients.openWindow(targetUrl);
+        if (newClient && shouldOpenGroupChat) {
+            newClient.postMessage({ type: 'OPEN_GROUP_CHAT_FROM_PUSH' });
+        }
     })());
 });
