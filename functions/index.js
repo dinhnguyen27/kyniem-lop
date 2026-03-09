@@ -23,6 +23,19 @@ function chunkArray(items, chunkSize = 500) {
   return chunks;
 }
 
+function extractUserTokens(userData = {}) {
+  const listTokens = Array.isArray(userData.fcmTokens)
+    ? userData.fcmTokens.filter(Boolean)
+    : [];
+  const legacyToken = String(userData.fcmToken || '').trim();
+
+  if (legacyToken) {
+    listTokens.push(legacyToken);
+  }
+
+  return [...new Set(listTokens.map((token) => String(token || '').trim()).filter(Boolean))];
+}
+
 async function collectGroupRecipientTokens(senderEmail = '') {
   const users = await db.collection('users').get();
   const tokens = [];
@@ -32,7 +45,7 @@ async function collectGroupRecipientTokens(senderEmail = '') {
     const email = String(userData.email || '').toLowerCase();
     if (!email || email === String(senderEmail || '').toLowerCase()) return;
 
-    const userTokens = Array.isArray(userData.fcmTokens) ? userData.fcmTokens.filter(Boolean) : [];
+    const userTokens = extractUserTokens(userData);
     if (!userTokens.length) return;
     tokens.push(...userTokens);
   });
@@ -68,7 +81,7 @@ exports.sendPushFromEvent = functions.region(PUSH_REGION).firestore
       }
 
       const userData = userSnap.docs[0].data() || {};
-      const tokens = Array.isArray(userData.fcmTokens) ? userData.fcmTokens.filter(Boolean) : [];
+            const tokens = extractUserTokens(userData);
       if (!tokens.length) {
         functions.logger.warn('Người nhận chưa có FCM token', { receiverEmail });
         return null;
@@ -129,7 +142,7 @@ exports.sendPushFromEvent = functions.region(PUSH_REGION).firestore
 
       users.forEach((doc) => {
         const userData = doc.data() || {};
-        const tokens = Array.isArray(userData.fcmTokens) ? userData.fcmTokens.filter(Boolean) : [];
+        const tokens = extractUserTokens(userData);
         if (!tokens.length) return;
 
         sendJobs.push(sendCapsulePush(doc.ref, tokens, event));
@@ -306,3 +319,4 @@ exports.sendGroupPushOnMessageCreate = functions.region(PUSH_REGION).firestore
 
     return null;
   });
+
