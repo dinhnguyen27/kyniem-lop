@@ -3002,6 +3002,17 @@ window.addEventListener('DOMContentLoaded', () => {
 
     setupMobileChatKeyboardBehavior();
 
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.addEventListener('message', (event) => {
+            if (event?.data?.type !== 'OPEN_GROUP_CHAT_FROM_PUSH') return;
+
+            const panel = document.getElementById('group-chat-panel');
+            if (!panel?.classList.contains('show')) {
+                toggleGroupChatPanel();
+            }
+        });
+    }
+
     if ('Notification' in window && Notification.permission === 'default') {
         Notification.requestPermission().catch(() => {});
     }
