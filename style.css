@@ -2582,3 +2582,78 @@ header,
     border-radius: 8px;
     margin-bottom: 4px;
 }
+
+.memory-popup-card img[onclick] {
+    con trỏ: con trỏ chuột;
+}
+
+.memory-popup-more-btn,
+.memory-jump-btn {
+    lề trên: 8px;
+    viền: không có;
+    border-radius: 999px;
+    khoảng đệm: 6px 12px;
+    background: linear-gradient(135deg, #ff7e5f, #ff6a48);
+    màu: #fff;
+    font-weight: 600;
+    con trỏ: con trỏ chuột;
+}
+
+.memory-jump-btn {
+    chiều rộng: 100%;
+}
+
+.memory-spot-modal {
+    Vị trí: cố định;
+    chèn: 0;
+    Chỉ số z: 4000;
+    hiển thị: không có;
+}
+
+.memory-spot-modal.show {
+    hiển thị: khối;
+}
+
+.memory-spot-modal-overlay {
+    vị trí: tuyệt đối;
+    chèn: 0;
+    background: rgba(0, 0, 0, 0.45);
+}
+
+.memory-spot-modal-content {
+    vị trí: tương đối;
+    Chỉ số z: 1;
+    chiều rộng: tối thiểu (760px, 92vw);
+    chiều cao tối đa: 82vh;
+    lề: 6vh tự động;
+    nền: #fff;
+    độ cong viền: 14px;
+    khoảng đệm: 14px;
+    overflow-y: auto;
+}
+
+.memory-spot-close {
+    vị trí: tuyệt đối;
+    trên cùng: 8px;
+    bên phải: 8px;
+    viền: không có;
+    nền: trong suốt;
+    cỡ chữ: 1.1rem;
+    con trỏ: con trỏ chuột;
+}
+
+.memory-spot-modal-grid {
+    lề trên: 10px;
+    hiển thị: lưới;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    khoảng cách: 10px;
+}
+
+.map-post-highlight {
+    hoạt ảnh: mapPostGlow 2s ease;
+}
+
+@keyframes mapPostGlow {
+    0%, 100% { box-shadow: 0 0 0 rgba(255,126,95,0); }
+    50% { box-shadow: 0 0 0 4px rgba(255,126,95,0.35), 0 0 24px rgba(255,126,95,0.45); }
+}
