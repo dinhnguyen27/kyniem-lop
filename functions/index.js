@@ -22,6 +22,26 @@ function chunkArray(items, chunkSize = 500) {
   return chunks;
 }
 
+async function collectGroupRecipientTokens(senderEmail = '') {
+  const users = await db.collection('users').get();
+  const tokens = [];
+
+  users.forEach((doc) => {
+    const userData = doc.data() || {};
+    const email = String(userData.email || '').toLowerCase();
+    if (!email || email === String(senderEmail || '').toLowerCase()) return;
+
+    const userTokens = Array.isArray(userData.fcmTokens) ? userData.fcmTokens.filter(Boolean) : [];
+    if (!userTokens.length) return;
+    tokens.push(...userTokens);
+  });
+
+  return {
+    usersCount: users.size,
+    uniqueTokens: [...new Set(tokens)]
+  };
+}
+
 exports.sendPushFromEvent = functions.firestore
   .document('notification_events/{eventId}')
   .onCreate(async (snap, context) => {
@@ -115,7 +135,7 @@ exports.sendPushFromEvent = functions.firestore
       });
 
       await Promise.all(sendJobs);
-      functions.logger.info('Đã xử lý gửi capsule push', { users: users.size, jobs: sendJobs.length });
+      functions.logger.info('Đã xử lý gửi capsule push', { users: usersCount, jobs: sendJobs.length });
     }
 
     if (type === 'group_chat_new_message') {
@@ -126,20 +146,7 @@ exports.sendPushFromEvent = functions.firestore
       const textPreview = String(event.textPreview || 'Mở ứng dụng để xem chi tiết tin nhắn mới.');
       const pushLink = normalizePushLink(event.link);
 
-      const users = await db.collection('users').get();
-      const tokens = [];
-
-      users.forEach((doc) => {
-        const userData = doc.data() || {};
-        const email = String(userData.email || '').toLowerCase();
-        if (!email || email === senderEmail) return;
-
-        const userTokens = Array.isArray(userData.fcmTokens) ? userData.fcmTokens.filter(Boolean) : [];
-        if (!userTokens.length) return;
-        tokens.push(...userTokens);
-      });
-
-      const uniqueTokens = [...new Set(tokens)];
+      const { usersCount, uniqueTokens } = await collectGroupRecipientTokens(senderEmail);
       const tokenBatches = chunkArray(uniqueTokens, 500);
 
       await Promise.all(tokenBatches.map((batchTokens) => sendGroupChatPush(batchTokens, {
@@ -152,7 +159,7 @@ exports.sendPushFromEvent = functions.firestore
       })));
 
       functions.logger.info('Đã xử lý gửi group chat push', {
-        users: users.size,
+        users: usersCount,
         tokenCount: uniqueTokens.length,
         batches: tokenBatches.length,
         senderEmail
@@ -261,3 +268,40 @@ async function cleanupInvalidTokens(userRef, tokens, responses) {
     fcmTokens: admin.firestore.FieldValue.arrayRemove(...invalidTokens)
   });
 }
+
+
+exports.sendGroupPushOnMessageCreate = functions.firestore
+  .document('group_messages/{messageId}')
+  .onCreate(async (snap, context) => {
+    const data = snap.data() || {};
+    const senderEmail = String(data.senderEmail || '').toLowerCase();
+    const senderName = String(data.senderName || senderEmail || 'Bạn cùng lớp');
+    const text = String(data.text || '').trim();
+    const sentAt = String(data.createdAt || Date.now());
+
+    const body = `${senderName} đã nhắn tin vào nhóm chat`;
+    const textPreview = text ? (text.length > 140 ? `${text.slice(0, 140)}…` : text) : 'Mở ứng dụng để xem chi tiết tin nhắn mới.';
+    const pushLink = normalizePushLink('/');
+
+    const { usersCount, uniqueTokens } = await collectGroupRecipientTokens(senderEmail);
+    const tokenBatches = chunkArray(uniqueTokens, 500);
+
+    await Promise.all(tokenBatches.map((batchTokens) => sendGroupChatPush(batchTokens, {
+      senderEmail,
+      senderName,
+      sentAt,
+      body,
+      textPreview,
+      link: pushLink
+    })));
+
+    functions.logger.info('Đã gửi push từ trigger group_messages', {
+      messageId: context.params.messageId,
+      users: usersCount,
+      tokenCount: uniqueTokens.length,
+      batches: tokenBatches.length,
+      senderEmail
+    });
+
+    return null;
+  });
