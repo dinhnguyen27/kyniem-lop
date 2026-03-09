@@ -1612,6 +1612,7 @@ async function sendGroupMessage() {
             senderEmail: me.email.toLowerCase(),
             senderName,
             body: `${senderName} đã nhắn tin vào nhóm chat`,
+            textPreview: text.length > 140 ? `${text.slice(0, 140)}…` : text,
             sentAt: Date.now(),
             link: '/'
         });
