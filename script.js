@@ -6,11 +6,11 @@ const firebaseConfig = {
     storageBucket: "kyniemlop-d3404.firebasestorage.app",
     messagingSenderId: "824232517330",
     appId: "1:824232517330:web:acf65afe55dac4d38b970b",
-    Mã đo: "G-XG46M01K89"
+    measurementId: "G-XG46M01K89"
 };
 
 // Khởi tạo Firebase
-nếu (!firebase.apps.length) {
+if (!firebase.apps.length) {
     firebase.initializeApp(firebaseConfig);
 }
 const db = firebase.firestore();
@@ -40,7 +40,7 @@ let latestMessagePreviewByEmail = {};
 let unreadCountsByEmail = {};
 let lastRemoteReadSyncByEmail = {};
 let chatReadState = JSON.parse(localStorage.getItem(CHAT_READ_KEY) || '{}');
-hãy chatUserSearchKeyword = '';
+let chatUserSearchKeyword = '';
 let hasUserTypedChatSearch = false;
 let currentOpenedLetter = null;
 let memoryMap = null;
@@ -53,64 +53,64 @@ const MEMORY_SPOTS = [
     {
         name: 'Quán trà sữa sau giờ học',
         address: 'Khu vực gần cổng trường',
-        Tọa độ: [21.0289, 105.8522],
+        coords: [21.0289, 105.8522],
         note: 'Nơi cả lớp hay tụ tập làm bài nhóm rồi tám chuyện tới tối.',
-        Ảnh: 'https://picsum.photos/seed/kyniem-tra-sua/420/250'
+        photo: 'https://picsum.photos/seed/kyniem-tra-sua/420/250'
     },
     {
         name: 'Công viên cuối tuần',
         address: 'Điểm dã ngoại quen thuộc',
-        Tọa độ: [21.0368, 105.8342],
+        coords: [21.0368, 105.8342],
         note: 'Những buổi chụp ảnh và đá bóng mini của lớp vào cuối tuần.',
-        Ảnh: 'https://picsum.photos/seed/kyniem-cong-vien/420/250'
+        photo: 'https://picsum.photos/seed/kyniem-cong-vien/420/250'
     },
     {
         name: 'Địa điểm dã ngoại năm cuối',
         address: 'Chuyến đi kỷ yếu',
-        Tọa độ: [21.0181, 105.8198],
+        coords: [21.0181, 105.8198],
         note: 'Buổi đi chơi đông đủ nhất, lưu lại rất nhiều ảnh kỷ niệm.',
-        Ảnh: 'https://picsum.photos/seed/kyniem-da-ngoai/420/250'
+        photo: 'https://picsum.photos/seed/kyniem-da-ngoai/420/250'
     }
 ];
 
-hàm parseFirestoreTimestampToMillis(value) {
-    nếu (!value) trả về 0;
+function parseFirestoreTimestampToMillis(value) {
+    if (!value) return 0;
     if (typeof value === 'number') return value;
     if (typeof value?.toMillis === 'function') return Number(value.toMillis() || 0);
     const seconds = Number(value?.seconds || 0);
     const nanos = Number(value?.nanoseconds || 0);
-    nếu (!giây) trả về 0;
-    return (giây * 1000) + Math.floor(nanos / 1e6);
+    if (!seconds) return 0;
+    return (seconds * 1000) + Math.floor(nanos / 1e6);
 }
 
-hàm formatMemoryDateLabel(ts) {
+function formatMemoryDateLabel(ts) {
     const millis = Number(ts || 0);
-    nếu (!millis) trả về '';
+    if (!millis) return '';
     const d = new Date(millis);
-    if ( Number . isNaN ( d . getTime() ) ) return '' ;
+    if (Number.isNaN(d.getTime())) return '';
     return d.toLocaleDateString('vi-VN');
 }
 
 
-hàm distanceMetersBetweenCoords(a = [], b = []) {
+function distanceMetersBetweenCoords(a = [], b = []) {
     const [lat1, lng1] = a.map(Number);
     const [lat2, lng2] = b.map(Number);
     if (![lat1, lng1, lat2, lng2].every(Number.isFinite)) return Number.POSITIVE_INFINITY;
 
     const toRad = (deg) => (deg * Math.PI) / 180;
-    hằng số R = 6371000;
+    const R = 6371000;
     const dLat = toRad(lat2 - lat1);
     const dLng = toRad(lng2 - lng1);
     const q = Math.sin(dLat / 2) ** 2
         + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-    trả về 2 * R * Math.asin(Math.sqrt(q));
+    return 2 * R * Math.asin(Math.sqrt(q));
 }
 
-hàm mergeNearbyMemorySpots(spots = [], thresholdMeters = 80) {
+function mergeNearbyMemorySpots(spots = [], thresholdMeters = 80) {
     const merged = [];
 
     spots.forEach((spot) => {
-        const coords = Array.isArray(spot?.coords) ? Spot.coords : [];
+        const coords = Array.isArray(spot?.coords) ? spot.coords : [];
         if (coords.length !== 2) return;
 
         const found = merged.find((item) => {
@@ -118,25 +118,25 @@ hàm mergeNearbyMemorySpots(spots = [], thresholdMeters = 80) {
             return Number.isFinite(dist) && dist <= thresholdMeters;
         });
 
-        nếu (!found) {
+        if (!found) {
             merged.push({
-                ...điểm,
-                ảnh: Array.isArray(spot.photos) ? [...spot.photos] : [],
-                số lượng: Số(điểm.số lượng || 1)
+                ...spot,
+                photos: Array.isArray(spot.photos) ? [...spot.photos] : [],
+                count: Number(spot.count || 1)
             });
-            trở lại;
+            return;
         }
 
         const existingCount = Number(found.count || 1);
         const incomingCount = Number(spot.count || 1);
         const total = existingCount + incomingCount;
 
-        đã tìm thấy.tọa độ = [
-            ((Số(tọa độ tìm thấy[0]) * Số lượng hiện có) + (Số(tọa độ[0]) * Số lượng đến)) / tổng,
-            ((Số(tọa độ tìm thấy[1]) * Số lượng hiện có) + (Số(tọa độ[1]) * Số lượng đến)) / tổng
+        found.coords = [
+            ((Number(found.coords[0]) * existingCount) + (Number(coords[0]) * incomingCount)) / total,
+            ((Number(found.coords[1]) * existingCount) + (Number(coords[1]) * incomingCount)) / total
         ];
 
-        số lượng tìm thấy = tổng số;
+        found.count = total;
         found.photos = [...(found.photos || []), ...(Array.isArray(spot.photos) ? spot.photos : [])];
 
         if (Number(spot.takenAt || 0) > Number(found.takenAt || 0)) {
@@ -154,11 +154,11 @@ hàm mergeNearbyMemorySpots(spots = [], thresholdMeters = 80) {
         }
     });
 
-    trả về giá trị đã hợp nhất;
+    return merged;
 }
 
-hàm bất đồng bộ getMemorySpotsFromPosts() {
-    thử {
+async function getMemorySpotsFromPosts() {
+    try {
         const snap = await db.collection('posts').get();
         const grouped = {};
 
@@ -175,22 +175,22 @@ hàm bất đồng bộ getMemorySpotsFromPosts() {
                 title: data.locationName || data.caption || 'Địa điểm kỷ niệm',
                 address: data.locationAddress || 'Địa điểm do lớp thêm từ ảnh kỷ niệm',
                 note: data.memoryNote || data.caption || 'Khoảnh khắc đáng nhớ của lớp.',
-                ảnh: data.url || 'https://picsum.photos/seed/kyniem-default/420/250',
+                photo: data.url || 'https://picsum.photos/seed/kyniem-default/420/250',
                 takenAt: takenAtMs
             };
 
-            nếu (!grouped[key]) {
-                nhóm[khóa] = {
-                    tên: tiêu đề mục,
-                    Địa chỉ: địa chỉ mặt hàng,
-                    Tọa độ: [vĩ độ, kinh độ],
-                    lưu ý: mục.ghi chú,
-                    ảnh: [mục],
+            if (!grouped[key]) {
+                grouped[key] = {
+                    name: item.title,
+                    address: item.address,
+                    coords: [lat, lng],
+                    note: item.note,
+                    photos: [item],
                     takenAt: item.takenAt,
-                    số lượng: 1,
+                    count: 1,
                     fromPost: true
                 };
-                trở lại;
+                return;
             }
 
             grouped[key].photos.push(item);
@@ -204,9 +204,9 @@ hàm bất đồng bộ getMemorySpotsFromPosts() {
         });
 
         return mergeNearbyMemorySpots(Object.values(grouped), 80);
-    } bắt lỗi (error) {
+    } catch (error) {
         console.warn('Không tải được dữ liệu ảnh kỷ niệm để đưa lên bản đồ:', error);
-        trở lại [];
+        return [];
     }
 }
 
@@ -221,15 +221,15 @@ let swRegistration = null;
 
 let fcmSupportCache = null;
 
-hàm getSiteBasePath() {
+function getSiteBasePath() {
     const pathname = window.location.pathname || '/';
-    nếu (đường dẫn kết thúc bằng '.html') {
+    if (pathname.endsWith('.html')) {
         return pathname.slice(0, pathname.lastIndexOf('/') + 1) || '/';
     }
     return pathname.endsWith('/') ? pathname : `${pathname}/`;
 }
 
-hàm getPushUnsupportedReason() {
+function getPushUnsupportedReason() {
     const ua = navigator.userAgent || '';
     const isIOS = /iPhone|iPad|iPod/i.test(ua);
     const isSafari = /^((?!chrome|crios|android).)*safari/i.test(ua);
@@ -239,53 +239,53 @@ hàm getPushUnsupportedReason() {
         return 'Safari iPhone chỉ hỗ trợ thông báo đẩy khi web được thêm vào Màn hình chính (Add to Home Screen).';
     }
 
-    nếu (!window.isSecureContext) {
+    if (!window.isSecureContext) {
         return 'Thông báo đẩy chỉ hoạt động trên HTTPS (hoặc localhost).';
     }
 
-    nếu (!('serviceWorker' trong navigator) || !('PushManager' trong window)) {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
         return 'Trình duyệt hiện tại chưa hỗ trợ đầy đủ Service Worker/Push API.';
     }
 
     return 'Thiết bị/trình duyệt chưa hỗ trợ Firebase Cloud Messaging.';
 }
 
-hàm bất đồng bộ isFCMSupported() {
+async function isFCMSupported() {
     if (fcmSupportCache !== null) return fcmSupportCache;
 
-    nếu (!firebase.messaging || !firebase.messaging.isSupported) {
+    if (!firebase.messaging || !firebase.messaging.isSupported) {
         fcmSupportCache = false;
-        Trả về false;
+        return false;
     }
 
-    thử {
+    try {
         const supportResult = firebase.messaging.isSupported();
         fcmSupportCache = typeof supportResult?.then === 'function'
             ? Boolean(await supportResult)
             : Boolean(supportResult);
-    } bắt lỗi (error) {
+    } catch (error) {
         fcmSupportCache = false;
         console.warn('FCM không được hỗ trợ trên trình duyệt này:', error);
     }
 
-    Trả về fcmSupportCache;
+    return fcmSupportCache;
 }
 
-hàm bất đồng bộ waitForServiceWorkerReady(timeoutMs = 10000) {
+async function waitForServiceWorkerReady(timeoutMs = 10000) {
     if (!('serviceWorker' in navigator)) return null;
 
-    thử {
-        trả về chờ Promise.race([
+    try {
+        return await Promise.race([
             navigator.serviceWorker.ready,
             new Promise((resolve) => setTimeout(() => resolve(null), timeoutMs))
         ]);
-    } bắt lỗi (error) {
+    } catch (error) {
         console.warn('Service Worker chưa sẵn sàng:', error);
-        trả về null;
+        return null;
     }
 }
 
-hàm bất đồng bộ registerMessagingServiceWorker() {
+async function registerMessagingServiceWorker() {
     if (!('serviceWorker' in navigator)) return null;
 
     const basePath = getSiteBasePath();
@@ -294,27 +294,27 @@ hàm bất đồng bộ registerMessagingServiceWorker() {
         : [`${basePath}firebase-messaging-sw.js`, '/firebase-messaging-sw.js'];
 
     for (const swUrl of candidates) {
-        thử {
+        try {
             const registration = await navigator.serviceWorker.register(swUrl, { scope: basePath });
             const readyRegistration = await waitForServiceWorkerReady();
 
             let hasReloaded = false;
             const reloadOnControllerChange = () => {
                 navigator.serviceWorker.addEventListener('controllerchange', () => {
-                    nếu (hasReloaded) trả về;
+                    if (hasReloaded) return;
                     hasReloaded = true;
                     window.location.reload();
                 });
             };
 
-            nếu (registration.waiting) {
+            if (registration.waiting) {
                 reloadOnControllerChange();
                 registration.waiting.postMessage({ type: 'SKIP_WAITING' });
             }
 
             registration.addEventListener('updatefound', () => {
                 const worker = registration.installing;
-                nếu (!worker) trả về;
+                if (!worker) return;
                 worker.addEventListener('statechange', () => {
                     if (worker.state === 'installed' && navigator.serviceWorker.controller) {
                         reloadOnControllerChange();
@@ -323,34 +323,34 @@ hàm bất đồng bộ registerMessagingServiceWorker() {
                 });
             });
 
-            nếu (registration.update) {
+            if (registration.update) {
                 setTimeout(() => registration.update().catch(() => {}), 3000);
                 setInterval(() => registration.update().catch(() => {}), 5 * 60 * 1000);
             }
 
             console.info(`FCM Service Worker đã đăng ký: ${swUrl}`);
-            trả về trạng thái đăng ký sẵn sàng || đăng ký;
-        } bắt lỗi (error) {
+            return readyRegistration || registration;
+        } catch (error) {
             console.warn(`Không đăng ký được SW tại ${swUrl}:`, error);
         }
     }
                                                  
-    trả về null;
+    return null;
 }
 
-hàm bất đồng bộ setupFirebaseMessaging() {
+async function setupFirebaseMessaging() {
     if (!(await isFCMSupported())) return;
-    nếu (thông báo) trả về;
+    if (messaging) return;
 
-    thử {
+    try {
         messaging = firebase.messaging();
-    } bắt lỗi (error) {
+    } catch (error) {
         console.warn('Không thể khởi tạo Firebase Messaging:', error);
-        trở lại;
+        return;
     }
 
     swRegistration = await registerMessagingServiceWorker();
-    nếu (!swRegistration) {
+    if (!swRegistration) {
         console.warn('FCM chưa hoạt động vì không đăng ký được Service Worker.');
     }
 
@@ -359,38 +359,38 @@ hàm bất đồng bộ setupFirebaseMessaging() {
         const title = payload?.notification?.title || payload?.data?.title || 'Thông báo mới';
         const body = payload?.notification?.body || payload?.data?.body || '';
        const senderName = payload?.data?.senderName || payload?.data?.sender || parseChatSenderFromTitle(title);
-        const đã gửiAt = Số(tải trọng?.data?.sentAt || Date.now());
+        const sentAt = Number(payload?.data?.sentAt || Date.now());
 
-        nếu (thân bài) {
-            nếu (type === 'chat_new_message') {
+        if (body) {
+            if (type === 'chat_new_message') {
                 showSystemToast(body, {
-                    biểu tượng: '💬',
+                    icon: '💬',
                     title: senderName ? `Tin nhắn từ ${senderName}` : 'Tin nhắn mới',
                     meta: formatChatTime(sentAt)
                 });
-            } khác {
+            } else {
                 showSystemToast(body, { icon: '🔔', title });
             }
         }
 
-        nếu ('Thông báo' trong cửa sổ và quyền Thông báo === 'đã cấp') {
-            nếu (swRegistration?.showNotification) {
+        if ('Notification' in window && Notification.permission === 'granted') {
+            if (swRegistration?.showNotification) {
                 swRegistration.showNotification(title, { body }).catch((error) => {
                     console.warn('Không hiển thị được foreground notification qua SW:', error);
                 });
-            } khác {
-                Thông báo mới(tiêu đề, { nội dung });
+            } else {
+                new Notification(title, { body });
             }
         }
     });
 }
 
-hàm bất đồng bộ saveFcmTokenForCurrentUser(token) {
+async function saveFcmTokenForCurrentUser(token) {
     const user = getCurrentUser();
     if (!user?.email || !token) return;
 
     const snap = await db.collection('users').where('email', '==', user.email.toLowerCase()).limit(1).get();
-    nếu (snap.empty) trả về;
+    if (snap.empty) return;
 
     await db.collection('users').doc(snap.docs[0].id).update({
         fcmTokens: firebase.firestore.FieldValue.arrayUnion(token),
@@ -398,29 +398,29 @@ hàm bất đồng bộ saveFcmTokenForCurrentUser(token) {
     });
 }
 
-hàm parseChatSenderFromTitle(title = '') {
+function parseChatSenderFromTitle(title = '') {
     const normalized = String(title || '').trim();
     const match = normalized.match(/^💬\s*(.+?)\s+vừa\s+nhắn\s+tin/i);
-    trả về kết quả khớp ? kết quả khớp[1].trim() : '';
+    return match ? match[1].trim() : '';
 }
 
-hàm cập nhật trạng thái nút nhấn (đã bật) {
+function updatePushButtonState(enabled) {
     const btn = document.getElementById('enable-push-btn');
-    nếu (!btn) trả về;
+    if (!btn) return;
 
-    nếu (được bật) {
+    if (enabled) {
         btn.textContent = 'Thông báo đẩy: Đã bật';
         btn.disabled = true;
-    } khác {
+    } else {
         btn.textContent = 'Bật thông báo đẩy';
         btn.disabled = false;
     }
 }
 
-hàm prepareMessagingCompat() {
-    nếu (!messaging) trả về;
+function prepareMessagingCompat() {
+    if (!messaging) return;
 
-    thử {
+    try {
         if (swRegistration && typeof messaging.useServiceWorker === 'function') {
             messaging.useServiceWorker(swRegistration);
         }
@@ -428,17 +428,17 @@ hàm prepareMessagingCompat() {
         if (FCM_VAPID_PUBLIC_KEY && typeof messaging.usePublicVapidKey === 'function') {
             messaging.usePublicVapidKey(FCM_VAPID_PUBLIC_KEY);
         }
-    } bắt lỗi (error) {
+    } catch (error) {
         console.warn('Không cấu hình được messaging compat API:', error);
     }
 }
 
-hàm trễ (ms) {
+function delay(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-hàm bất đồng bộ getFcmTokenWithFallback() {
-    nếu (!messaging) trả về null;
+async function getFcmTokenWithFallback() {
+    if (!messaging) return null;
 
     prepareMessagingCompat();
 
@@ -452,25 +452,25 @@ hàm bất đồng bộ getFcmTokenWithFallback() {
 
     for (let i = 0; i < strategies.length; i++) {
         for (let attempt = 1; attempt <= 2; attempt++) {
-            thử {
+            try {
                 const token = await strategies[i]();
-                nếu (token) trả về token;
-            } bắt lỗi (error) {
-                lastError = lỗi;
+                if (token) return token;
+            } catch (error) {
+                lastError = error;
                 console.warn(`Lấy FCM token thất bại ở chiến lược ${i + 1}, lần ${attempt}:`, error);
             }
 
-            nếu (thử < 2) {
-                chờ đợi độ trễ (400 * lần thử);
+            if (attempt < 2) {
+                await delay(400 * attempt);
             }
         }
     }
 
-    nếu (lastError) ném lỗi cuối cùng;
-    trả về null;
+    if (lastError) throw lastError;
+    return null;
 }
 
-hàm buildPushErrorMessage(error) {
+function buildPushErrorMessage(error) {
     const code = String(error?.code || '');
     const message = String(error?.message || '');
     const lower = `${code} ${message}`.toLowerCase();
@@ -479,7 +479,7 @@ hàm buildPushErrorMessage(error) {
         return getPushUnsupportedReason();
     }
 
-    nếu (code.includes('permission-blocked')) {
+    if (code.includes('permission-blocked')) {
         return 'Trình duyệt đang chặn thông báo. Hãy mở Site Settings và cho phép Notifications.';
     }
 
@@ -498,91 +498,91 @@ hàm buildPushErrorMessage(error) {
     return 'Không thể bật thông báo đẩy. Kiểm tra Service Worker, domain HTTPS và cấu hình Firebase.';
 }
 
-hàm bất đồng bộ enablePushNotifications(options = {}) {
+async function enablePushNotifications(options = {}) {
     const silent = !!options.silent;
-    nếu (!(await isFCMSupported())) {
-        nếu (!silent) alert(getPushUnsupportedReason());
-        trở lại;
+    if (!(await isFCMSupported())) {
+        if (!silent) alert(getPushUnsupportedReason());
+        return;
     }
 
-    chờ thiết lập FirebaseMessaging();
+    await setupFirebaseMessaging();
 
-    nếu (!swRegistration) {
+    if (!swRegistration) {
         if (!silent) alert(`Không đăng ký được Service Worker cho FCM. Hãy kiểm tra file firebase-messaging-sw.js có tồn tại ở ${getSiteBasePath()}firebase-messaging-sw.js`);
-        trở lại;
+        return;
     }
 
-    thử {
-        nếu ('Thông báo' trong cửa sổ và quyền Thông báo khác với 'đã cấp') {
+    try {
+        if ('Notification' in window && Notification.permission !== 'granted') {
             const permission = await Notification.requestPermission();
-            nếu (quyền cho phép khác 'đã cấp') {
+            if (permission !== 'granted') {
                 if (!silent) alert('Bạn cần cho phép thông báo để nhận tin khi không mở tab web.');
                 updatePushButtonState(false);
-                trở lại;
+                return;
             }
         }
 
         const token = await getFcmTokenWithFallback();
-        nếu (!token) {
+        if (!token) {
             if (!silent) alert('Chưa lấy được FCM token. Vui lòng thử lại.');
-            trở lại;
+            return;
         }
 
         localStorage.setItem(FCM_TOKEN_KEY, token);
-        chờ lưu mã thông báo Fcm cho người dùng hiện tại (mã thông báo);
+        await saveFcmTokenForCurrentUser(token);
         updatePushButtonState(true);
         showSystemToast('Đã bật thông báo thông minh qua FCM.');
-    } bắt lỗi (error) {
+    } catch (error) {
         console.error('Bật thông báo đẩy thất bại:', error);
-        nếu (!silent) alert(buildPushErrorMessage(error));
+        if (!silent) alert(buildPushErrorMessage(error));
     }
 }
 
-hàm bất đồng bộ autoEnablePushIfPossible() {
+async function autoEnablePushIfPossible() {
     if (!(await isFCMSupported())) return;
     if (!getCurrentUser()?.email) return;
 
-    chờ thiết lập FirebaseMessaging();
-    nếu (!swRegistration) {
+    await setupFirebaseMessaging();
+    if (!swRegistration) {
         updatePushButtonState(false);
-        trở lại;
+        return;
     }
 
-    nếu ('Thông báo' trong cửa sổ và quyền Thông báo khác với 'đã cấp') {
+    if ('Notification' in window && Notification.permission !== 'granted') {
         updatePushButtonState(false);
-        trở lại;
+        return;
     }
 
-    thử {
+    try {
         const token = await getFcmTokenWithFallback();
-        nếu (!token) {
+        if (!token) {
             updatePushButtonState(false);
-            trở lại;
+            return;
         }
 
         const oldToken = localStorage.getItem(FCM_TOKEN_KEY);
-        nếu (oldToken khác token) {
+        if (oldToken !== token) {
             localStorage.setItem(FCM_TOKEN_KEY, token);
-            chờ lưu mã thông báo Fcm cho người dùng hiện tại (mã thông báo);
+            await saveFcmTokenForCurrentUser(token);
         }
 
         updatePushButtonState(true);
-    } bắt lỗi (error) {
+    } catch (error) {
         console.warn('Không tự kích hoạt được FCM:', error);
         updatePushButtonState(false);
     }
 }
 
 
-chức năng không đồng bộ autoEnablePushFromFirstGesture() {
+async function autoEnablePushFromFirstGesture() {
     if (localStorage.getItem(AUTO_PUSH_PROMPT_KEY) === '1') return;
     if (!getCurrentUser()?.email) return;
 
     localStorage.setItem(AUTO_PUSH_PROMPT_KEY, '1');
 
-    thử {
-        chờ bật thông báo đẩy ({ silent: true });
-    } bắt lỗi (error) {
+    try {
+        await enablePushNotifications({ silent: true });
+    } catch (error) {
         console.warn('Không tự bật được push từ tương tác đầu tiên:', error);
     }
 }
@@ -600,15 +600,15 @@ function initAutoPushEnableOnFirstGesture() {
     document.addEventListener('touchstart', trigger, true);
 }
 
-hàm bất đồng bộ queueNotificationEvent(eventId, payload) {
+async function queueNotificationEvent(eventId, payload) {
     if (!eventId || !payload) return;
 
-    thử {
+    try {
         await db.collection('notification_events').doc(eventId).set({
-            ...hàng hóa,
+            ...payload,
             createdAt: Date.now()
         }, { merge: true });
-    } bắt lỗi (error) {
+    } catch (error) {
         console.warn('Không thể tạo sự kiện thông báo:', error);
     }
 }
@@ -618,24 +618,24 @@ function buildAvatarUrl(name = 'Thành viên lớp') {
     return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=ff7e5f&color=fff`;
 }
 
-hàm normalizeUserAvatar(user) {
-    nếu (!user) trả về null;
+function normalizeUserAvatar(user) {
+    if (!user) return null;
     return { ...user, avatar: user.avatar || buildAvatarUrl(user.name) };
 }
 
-hàm getSavedAccounts() {
+function getSavedAccounts() {
     return JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || '[]');
 }
 
-hàm saveAccounts(accounts) {
+function saveAccounts(accounts) {
     localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
 }
 
-hàm getCurrentUser() {
+function getCurrentUser() {
     return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
 }
 
-hàm buildMemoryPopupHtml(spot) {
+function buildMemoryPopupHtml(spot) {
     const title = escapeHtml(spot.name || 'Địa điểm kỷ niệm');
     const address = escapeHtml(spot.address || '');
     const note = escapeHtml(spot.note || '');
@@ -651,19 +651,19 @@ hàm buildMemoryPopupHtml(spot) {
         const safeItemNote = escapeHtml(item.note || '');
         const safeItemDate = escapeHtml(formatMemoryDateLabel(item.takenAt));
         const safePostId = escapeHtml(item.id || '');
-        const jumpHandler = safePostId? `onclick="focusGalleryPost('${safePostId}')"` : '';
-        trả về `<div class="memory-popup-card">
+        const jumpHandler = safePostId ? `onclick="focusGalleryPost('${safePostId}')"` : '';
+        return `<div class="memory-popup-card">
             <img src="${safePhoto}" alt="${title}" loading="lazy" ${jumpHandler}>
             <div class="memory-popup-note">${safeItemNote || note}</div>
             ${safeItemDate ? `<div class="memory-popup-time">🗓️ ${safeItemDate}</div>` : ''}
         </div>`;
-    }).tham gia('');
+    }).join('');
 
     const moreButtonHtml = safeCount > 4
         ? `<button class="memory-popup-more-btn" onclick="openMemorySpotModal('${encodeURIComponent(JSON.stringify(photos))}', '${encodeURIComponent(spot.name || '')}', '${encodeURIComponent(spot.address || '')}', '${encodeURIComponent(spot.note || '')}')">Xem thêm (${safeCount - 4})</button>`
         : '';
 
-    trả về `
+    return `
         <div class="memory-popup">
             <div class="memory-popup-title">${title} ${safeCount > 1 ? `(${safeCount} ảnh)` : ''}</div>
             <div class="memory-popup-address">📍 ${address}</div>
@@ -674,7 +674,7 @@ hàm buildMemoryPopupHtml(spot) {
     `;
 }
 
-hàm ensureMemorySpotModal() {
+function ensureMemorySpotModal() {
     if (document.getElementById('memory-spot-modal')) return;
     const modal = document.createElement('div');
     modal.id = 'memory-spot-modal';
@@ -700,10 +700,10 @@ function openMemorySpotModal(rawPhotos = '[]', rawTitle = '', rawAddress = '', r
     if (!modal || !grid || !titleEl || !addressEl) return;
 
     let photos = [];
-    thử {
+    try {
         photos = JSON.parse(decodeURIComponent(rawPhotos));
-    } bắt lỗi (error) {
-        ảnh = [];
+    } catch (error) {
+        photos = [];
     }
 
     const title = decodeURIComponent(rawTitle || '');
@@ -718,60 +718,60 @@ function openMemorySpotModal(rawPhotos = '[]', rawTitle = '', rawAddress = '', r
         const safeDate = escapeHtml(formatMemoryDateLabel(item.takenAt));
         const safePostId = escapeHtml(item.id || '');
         const actionBtn = safePostId
-            ? `<button class="memory-jump-btn" onclick="focusGalleryPost('${safePostId}'); closeMemorySpotModal();">vỗ bài viết</button>`
+            ? `<button class="memory-jump-btn" onclick="focusGalleryPost('${safePostId}'); closeMemorySpotModal();">Đến bài viết</button>`
             : '';
-        trả về `<div class="memory-popup-card">
+        return `<div class="memory-popup-card">
             <img src="${safePhoto}" alt="${escapeHtml(title)}" loading="lazy">
             <div class="memory-popup-note">${safeNote}</div>
             ${safeDate ? `<div class="memory-popup-time">🗓️ ${safeDate}</div>` : ''}
             ${actionBtn}
         </div>`;
-    }).tham gia('');
+    }).join('');
 
     modal.classList.add('show');
 }
 
-hàm closeMemorySpotModal() {
+function closeMemorySpotModal() {
     document.getElementById('memory-spot-modal')?.classList.remove('show');
 }
 
-hàm focusGalleryPost(postId) {
-    nếu (!postId) trả về;
+function focusGalleryPost(postId) {
+    if (!postId) return;
     const target = document.querySelector(`[data-post-id="${postId}"]`);
 
-    nếu (!target && currentYearFilter !== 'all') {
+    if (!target && currentYearFilter !== 'all') {
         pendingScrollPostId = postId;
         filterByYear('all');
-        trở lại;
+        return;
     }
 
-    nếu (!target) trả về;
+    if (!target) return;
 
     target.scrollIntoView({ behavior: 'smooth', block: 'center' });
     target.classList.add('map-post-highlight');
     setTimeout(() => target.classList.remove('map-post-highlight'), 2000);
 }
 
-hàm bất đồng bộ initMemoryMap() {
+async function initMemoryMap() {
     const mapEl = document.getElementById('memory-map');
-    nếu (!mapEl) trả về;
+    if (!mapEl) return;
 
-    nếu (typeof window.L === 'undefined') {
+    if (typeof window.L === 'undefined') {
         console.warn('Leaflet chưa tải xong, bỏ qua khởi tạo bản đồ kỷ niệm.');
-        trở lại;
+        return;
     }
 
     const dynamicSpots = await getMemorySpotsFromPosts();
     const fallbackSpots = mergeNearbyMemorySpots(MEMORY_SPOTS, 80);
-    const spots = dynamicSpons.length ? dynamicSpons : fallbackSpons;
+    const spots = dynamicSpots.length ? dynamicSpots : fallbackSpots;
 
-    nếu (memoryMap) {
-        MemoryMap.eachLayer((layer) => {
-            nếu (lớp là một thể hiện của L.Marker) {
+    if (memoryMap) {
+        memoryMap.eachLayer((layer) => {
+            if (layer instanceof L.Marker) {
                 memoryMap.removeLayer(layer);
             }
         });
-    } khác {
+    } else {
         memoryMap = L.map(mapEl, {
             zoomControl: true,
             scrollWheelZoom: false
@@ -779,7 +779,7 @@ hàm bất đồng bộ initMemoryMap() {
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19,
-            Ghi nguồn: '© Những người đóng góp cho OpenStreetMap'
+            attribution: '&copy; OpenStreetMap contributors'
         }).addTo(memoryMap);
 
         mapEl.addEventListener('mouseenter', () => memoryMap?.scrollWheelZoom.enable());
@@ -799,7 +799,7 @@ hàm bất đồng bộ initMemoryMap() {
         });
     });
 
-    nếu (bounds.length > 1) {
+    if (bounds.length > 1) {
         memoryMap.fitBounds(bounds, { padding: [28, 28] });
     } else if (bounds.length === 1) {
         memoryMap.setView(bounds[0], 15);
@@ -808,33 +808,33 @@ hàm bất đồng bộ initMemoryMap() {
     setTimeout(() => memoryMap?.invalidateSize(), 160);
 }
 
-hàm updateCurrentUserDisplay() {
+function updateCurrentUserDisplay() {
     const user = normalizeUserAvatar(getCurrentUser());
     const chip = document.getElementById('current-user-display');
     const avatar = document.getElementById('current-user-avatar');
 
-    nếu (chip) {
+    if (chip) {
         chip.innerText = user ? `${user.name} • ${user.phone} • ${user.email}` : 'Bạn chưa đăng nhập';
     }
 
-    nếu (hình đại diện) {
-        avatar.src = người dùng?.avatar || buildAvatarUrl('Khách');
+    if (avatar) {
+        avatar.src = user?.avatar || buildAvatarUrl('Khách');
         avatar.style.display = 'block';
     }
 
     const senderInput = document.getElementById('capsule-sender');
-    nếu (senderInput && user) {
+    if (senderInput && user) {
         senderInput.value = user.name;
     }
 }
 
-hàm saveNotifiedUnlockIds() {
+function saveNotifiedUnlockIds() {
     localStorage.setItem(UNLOCK_NOTIFY_KEY, JSON.stringify([...notifiedUnlockIds]));
 }
 
 function showSystemToast(message, options = {}) {
     const toast = document.getElementById('music-toast');
-    nếu (!toast) trả về;
+    if (!toast) return;
 
     const icon = options.icon || '🔔';
     const title = options.title || 'Thông báo mới';
@@ -856,11 +856,11 @@ function showSystemToast(message, options = {}) {
 function notifyUnlockedMessages(allMessages, today) {
     const unlockedMessages = allMessages.filter((m) => today >= m.unlockDate);
 
-    nếu (!unlockWatcherInitialized) {
+    if (!unlockWatcherInitialized) {
         unlockedMessages.forEach((m) => notifiedUnlockIds.add(m.id));
         saveNotifiedUnlockIds();
         unlockWatcherInitialized = true;
-        trở lại;
+        return;
     }
 
     const newlyUnlocked = unlockedMessages.filter((m) => !notifiedUnlockIds.has(m.id));
@@ -878,81 +878,81 @@ function notifyUnlockedMessages(allMessages, today) {
 
     const unlockedIds = newlyUnlocked.map((m) => m.id).filter(Boolean).join('_');
     queueNotificationEvent(`unlock_${unlockedIds}`, {
-        loại: 'capsule_unlocked',
+        type: 'capsule_unlocked',
         unlockMessageIds: newlyUnlocked.map((m) => m.id).filter(Boolean),
         senderName: latest.sender || 'một bạn',
-        nội dung: tin nhắn
+        body: message
     });
 
-    nếu ('Thông báo' trong cửa sổ và quyền Thông báo === 'đã cấp') {
+    if ('Notification' in window && Notification.permission === 'granted') {
         new Notification('Hộp thư thời gian', { body: message });
     }
 }
 
-hàm getOnlineStateFromTimestamp(lastActiveAt) {
-    nếu (!lastActiveAt) trả về false;
+function getOnlineStateFromTimestamp(lastActiveAt) {
+    if (!lastActiveAt) return false;
     return Date.now() - Number(lastActiveAt) <= ONLINE_ACTIVE_WINDOW_MS;
 }
 
-hàm cập nhật huy hiệu trực tuyến của riêng bạn() {
+function updateOwnOnlineBadge() {
     const badge = document.getElementById('online-status');
-    nếu (!badge) trả về;
+    if (!badge) return;
 
     const isOnline = navigator.onLine;
-    huy hiệu.textContent = isOnline ? 'Trực tuyến' : 'Ngoại tuyến';
+    badge.textContent = isOnline ? 'Online' : 'Offline';
     badge.classList.toggle('online', isOnline);
     badge.classList.toggle('offline', !isOnline);
 }
 
-hàm bất đồng bộ updateMyPresence() {
+async function updateMyPresence() {
     const user = getCurrentUser();
-    nếu (!user?.email) trả về;
+    if (!user?.email) return;
 
     updateOwnOnlineBadge();
 
-    thử {
+    try {
         const snap = await db.collection('users').where('email', '==', user.email).limit(1).get();
-        nếu (!snap.empty) {
+        if (!snap.empty) {
             await db.collection('users').doc(snap.docs[0].id).update({
                 lastActiveAt: Date.now(),
                 isOnline: navigator.onLine
             });
         }
-    } bắt (e) {
+    } catch (e) {
         console.warn('Không cập nhật được trạng thái online:', e);
     }
 }
 
-hàm startPresenceTracking() {
+function startPresenceTracking() {
     updateMyPresence();
     if (presenceInterval) clearInterval(presenceInterval);
     presenceInterval = setInterval(updateMyPresence, 45000);
 }
 
-hàm stopPresenceTracking() {
-    nếu (presenceInterval) {
+function stopPresenceTracking() {
+    if (presenceInterval) {
         clearInterval(presenceInterval);
         presenceInterval = null;
     }
 }
 
-hàm getChatKey(emailA, emailB) {
+function getChatKey(emailA, emailB) {
     return [emailA, emailB].map((s) => (s || '').toLowerCase()).sort().join('__');
 }
 
-hàm getPrivateConversationRef(emailA, emailB) {
+function getPrivateConversationRef(emailA, emailB) {
     return db.collection('private_messages').doc(getChatKey(emailA, emailB));
 }
 
-hàm getPrivateMessagesRef(emailA, emailB) {
+function getPrivateMessagesRef(emailA, emailB) {
     return getPrivateConversationRef(emailA, emailB).collection('tin_nhan');
 }
 
-hàm getReadMarkerKey(email = '') {
+function getReadMarkerKey(email = '') {
     return (email || '').toLowerCase().replace(/\./g, ',');
 }
 
-hàm getReadTimestampFromConversation(data, email) {
+function getReadTimestampFromConversation(data, email) {
     const key = getReadMarkerKey(email);
     return Number(data?.readBy?.[key] || 0);
 }
@@ -963,7 +963,7 @@ function syncConversationReadState(otherEmail, timestamp = Date.now()) {
 
     const key = (otherEmail || '').toLowerCase();
     const ts = Number(timestamp || 0);
-    nếu (!ts || ts <= Number(lastRemoteReadSyncByEmail[key] || 0)) {
+    if (!ts || ts <= Number(lastRemoteReadSyncByEmail[key] || 0)) {
         return Promise.resolve();
     }
 
@@ -979,20 +979,20 @@ function syncConversationReadState(otherEmail, timestamp = Date.now()) {
     });
 }
 
-hàm toggleChatPanel() {
+function toggleChatPanel() {
     const panel = document.getElementById('chat-panel');
     panel?.classList.toggle('show');
 }
 
-hàm đóng cửa trò chuyện riêng tư() {
+function closePrivateChat() {
     const panel = document.getElementById('chat-panel');
     panel?.classList.remove('in-conversation');
     selectedChatUser = null;
-    nếu (chatUnsubscribe) {
+    if (chatUnsubscribe) {
         chatUnsubscribe();
         chatUnsubscribe = null;
     }
-    nếu (chatConversationUnsubscribe) {
+    if (chatConversationUnsubscribe) {
         chatConversationUnsubscribe();
         chatConversationUnsubscribe = null;
     }
@@ -1001,22 +1001,22 @@ hàm đóng cửa trò chuyện riêng tư() {
     document.getElementById('emoji-picker')?.classList.remove('show');
 }
 
-hàm saveChatReadState() {
+function saveChatReadState() {
     localStorage.setItem(CHAT_READ_KEY, JSON.stringify(chatReadState));
 }
 
-hàm cập nhật huy hiệu chưa đọc tin nhắn toàn cầu() {
+function updateGlobalChatUnreadBadge() {
     const badge = document.getElementById('chat-unread-badge');
     const toggleBtn = document.getElementById('chat-toggle-btn');
-    nếu (!badge) trả về;
+    if (!badge) return;
 
     const senders = Object.values(unreadCountsByEmail).filter((c) => Number(c) > 0).length;
-    nếu (người gửi <= 0) {
+    if (senders <= 0) {
         badge.style.display = 'none';
         badge.textContent = '0';
         toggleBtn?.classList.remove('has-unread');
         toggleBtn?.setAttribute('aria-label', 'Chat');
-        trở lại;
+        return;
     }
 
     badge.style.display = 'inline-flex';
@@ -1026,7 +1026,7 @@ hàm cập nhật huy hiệu chưa đọc tin nhắn toàn cầu() {
 }
 
 function markChatAsRead(otherEmail, timestamp = Date.now()) {
-    nếu (!otherEmail) trả về;
+    if (!otherEmail) return;
     const key = otherEmail.toLowerCase();
     chatReadState[key] = Math.max(Number(chatReadState[key] || 0), Number(timestamp || 0));
     unreadCountsByEmail[key] = 0;
@@ -1034,8 +1034,8 @@ function markChatAsRead(otherEmail, timestamp = Date.now()) {
     updateGlobalChatUnreadBadge();
 }
 
-hàm sắp xếp người dùng trò chuyện theo người dùng mới nhất {
-    trả về [...người dùng].sort((a, b) => {
+function sortChatUsersByLatest(users) {
+    return [...users].sort((a, b) => {
         const aTs = Number(lastMessageAtByEmail[(a.email || '').toLowerCase()] || 0);
         const bTs = Number(lastMessageAtByEmail[(b.email || '').toLowerCase()] || 0);
         if (bTs !== aTs) return bTs - aTs;
@@ -1043,9 +1043,9 @@ hàm sắp xếp người dùng trò chuyện theo người dùng mới nhất {
     });
 }
 
-hàm initRecentMessagesRanking() {
+function initRecentMessagesRanking() {
     const me = getCurrentUser();
-    nếu (!me?.email) trả về;
+    if (!me?.email) return;
 
     if (recentMessagesUnsubscribe) recentMessagesUnsubscribe();
 
@@ -1063,14 +1063,14 @@ hàm initRecentMessagesRanking() {
                     ? data.participants.map((value) => (value || '').toLowerCase())
                     : [];
                 const other = participants.find((email) => email && email !== myEmail);
-                nếu (!khác) trả về;
+                if (!other) return;
 
                 const ts = Number(data.lastMessageAt || 0);
-                nếu (!latest[other] || ts > latest[other]) {
+                if (!latest[other] || ts > latest[other]) {
                     latest[other] = ts;
                     latestPreview[other] = {
-                        văn bản: data.lastMessageText || '',
-                        tên người gửi: data.lastSenderName || '',
+                        text: data.lastMessageText || '',
+                        senderName: data.lastSenderName || '',
                         isFromMe: (data.lastSenderEmail || '').toLowerCase() === myEmail
                     };
                 }
@@ -1080,7 +1080,7 @@ hàm initRecentMessagesRanking() {
                 const isInOpenChat = selectedChatUser && other === (selectedChatUser.email || '').toLowerCase();
 
                 if (isIncoming && ts > lastRead && !isInOpenChat) {
-                    chưa đọc[khác] = 1;
+                    unread[other] = 1;
                 }
             });
 
@@ -1089,16 +1089,16 @@ hàm initRecentMessagesRanking() {
             unreadCountsByEmail = unread;
             updateGlobalChatUnreadBadge();
             if (allChatUsers.length) renderChatUsers(allChatUsers);
-        }, (lỗi) => {
+        }, (error) => {
             console.warn('Không tải được xếp hạng tin nhắn mới nhất:', error);
         });
 }
 
-hàm filterChatUsersByKeyword(users) {
+function filterChatUsersByKeyword(users) {
     const keyword = (chatUserSearchKeyword || "").trim().toLowerCase();
-    nếu (!từ khóa) trả về người dùng;
+    if (!keyword) return users;
 
-    trả về users.filter((u) => {
+    return users.filter((u) => {
         const name = (u.name || "").toLowerCase();
         return name.includes(keyword);
     });
@@ -1113,7 +1113,7 @@ function clearChatSearchAutofill(chatUserSearchInput) {
     if (allChatUsers.length) renderChatUsers(allChatUsers);
 }
 
-hàm setupMobileChatKeyboardBehavior() {
+function setupMobileChatKeyboardBehavior() {
     const panel = document.getElementById('chat-panel');
     const chatInput = document.getElementById('chat-input');
     const viewport = window.visualViewport;
@@ -1126,15 +1126,15 @@ hàm setupMobileChatKeyboardBehavior() {
 
     const applyPanelPosition = () => {
         const isTyping = document.activeElement === chatInput;
-        nếu (!isTyping) {
+        if (!isTyping) {
             resetPanelPosition();
-            trở lại;
+            return;
         }
 
         const keyboardHeight = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
-        nếu (chiều cao bàn phím < 80) {
+        if (keyboardHeight < 80) {
             resetPanelPosition();
-            trở lại;
+            return;
         }
 
         panel.classList.add('keyboard-open');
@@ -1147,7 +1147,7 @@ hàm setupMobileChatKeyboardBehavior() {
     chatInput.addEventListener('blur', resetPanelPosition);
 }
 
-hàm renderChatUsers(users) {
+function renderChatUsers(users) {
     const list = document.getElementById('chat-users');
     const me = getCurrentUser();
     if (!list || !me?.email) return;
@@ -1172,7 +1172,7 @@ hàm renderChatUsers(users) {
         const recencyLabel = formatChatRecencyLabel(lastMessageAtByEmail[emailLower]);
         const safePreview = escapeHtml(recencyLabel ? `${previewText} • ${recencyLabel}` : previewText);
         const lastSeen = online ? '' : formatLastSeenLabel(u.lastActiveAt);
-        const statusText = online ? 'Trực tuyến' : (lastSeen || 'Ngoại tuyến');
+        const statusText = online ? 'Online' : (lastSeen || 'Offline');
         const statusClass = online ? 'online' : (lastSeen && lastSeen !== 'Offline' ? 'recent' : 'long-offline');
 
         return `<div class="chat-user-item ${online ? 'online' : ''}" onclick="openPrivateChatByEmail('${email}')">
@@ -1187,14 +1187,14 @@ hàm renderChatUsers(users) {
             </div>
             <span class="chat-user-unread ${unreadCount > 0 ? 'show' : ''}">${unreadCount > 99 ? '99+' : unreadCount}</span>
         </div>`;
-    }).tham gia('');
+    }).join('');
 
-    nếu (!filteredUsers.length) {
+    if (!filteredUsers.length) {
         list.innerHTML = '<p style="color:#888;padding:8px 6px;">Không tìm thấy người phù hợp.</p>';
     }
 }
 
-hàm mở cuộc trò chuyện riêng với người dùng(user) {
+function openPrivateChatWithUser(user) {
     if (!user?.email) return false;
 
     selectedChatUser = user;
@@ -1206,22 +1206,22 @@ hàm mở cuộc trò chuyện riêng với người dùng(user) {
     markChatAsRead(selectedChatUser.email);
     if (allChatUsers.length) renderChatUsers(allChatUsers);
     loadPrivateMessages();
-    Trả về giá trị đúng;
+    return true;
 }
 
-hàm mở cuộc trò chuyện riêng tư qua email (email) {
+function openPrivateChatByEmail(email) {
     const user = chatUsersCache.find((u) => (u.email || '').toLowerCase() === (email || '').toLowerCase())
         || allChatUsers.find((u) => (u.email || '').toLowerCase() === (email || '').toLowerCase())
         || null;
-    nếu (!user) trả về;
+    if (!user) return;
 
     openPrivateChatWithUser(user);
 }
 
-hàm initPrivateChatUsers() {
+function initPrivateChatUsers() {
     initRecentMessagesRanking();
 
-    nếu (usersUnsubscribe) usersUnsubscribe();
+    if (usersUnsubscribe) usersUnsubscribe();
     usersUnsubscribe = db.collection('users').onSnapshot((snap) => {
         const users = [];
         snap.forEach((doc) => users.push(doc.data()));
@@ -1230,7 +1230,7 @@ hàm initPrivateChatUsers() {
     });
 }
 
-hàm loadPrivateMessages() {
+function loadPrivateMessages() {
     const me = getCurrentUser();
     if (!selectedChatUser || !me?.email) return;
 
@@ -1244,7 +1244,7 @@ hàm loadPrivateMessages() {
     let otherReadTs = 0;
 
     const renderMessages = () => {
-        nếu (!messagesBox) trả về;
+        if (!messagesBox) return;
 
         const docs = [...latestDocs].sort((a, b) => {
             const tsDiff = Number(a.createdAt || 0) - Number(b.createdAt || 0);
@@ -1265,9 +1265,9 @@ hàm loadPrivateMessages() {
             const ts = Number(data.createdAt || 0);
             const dateKey = getChatDateKey(ts);
 
-            nếu (dateKey && dateKey !== lastRenderedDateKey) {
+            if (dateKey && dateKey !== lastRenderedDateKey) {
                 html += `<div class="chat-time-separator">${escapeHtml(formatChatCenterDateTime(ts))}</div>`;
-                LastRenderedDateKey = dateKey;
+                lastRenderedDateKey = dateKey;
             }
 
             if (!isMe && ts > latestIncomingTs) latestIncomingTs = ts;
@@ -1276,8 +1276,8 @@ hàm loadPrivateMessages() {
             html += `<div class="chat-bubble ${isMe ? 'me' : 'other'}">${safeText}<span class="meta">${senderName} • ${timeText}</span></div>`;
         });
 
-        nếu (latestOutgoingTs && otherReadTs >= latestOutgoingTs) {
-            html += '<div class="chat-read-receipt" style="text-align:right;color:#9aa2ff;font-size:12px;margin-top:6px;"> xem</div>';
+        if (latestOutgoingTs && otherReadTs >= latestOutgoingTs) {
+            html += '<div class="chat-read-receipt" style="text-align:right;color:#9aa2ff;font-size:12px;margin-top:6px;">Đã xem</div>';
         }
 
         if (latestIncomingTs && selectedChatUser?.email) {
@@ -1290,7 +1290,7 @@ hàm loadPrivateMessages() {
         messagesBox.scrollTop = messagesBox.scrollHeight;
     };
 
-    nếu (messagesBox) {
+    if (messagesBox) {
         messagesBox.innerHTML = '<p style="color:#888">Đang tải tin nhắn...</p>';
     }
 
@@ -1298,7 +1298,7 @@ hàm loadPrivateMessages() {
         const data = doc.data() || {};
         otherReadTs = getReadTimestampFromConversation(data, selectedChatUser?.email || '');
         renderMessages();
-    }, (lỗi) => {
+    }, (error) => {
         console.warn('Không tải được trạng thái đã xem của cuộc trò chuyện:', error);
     });
 
@@ -1309,33 +1309,33 @@ hàm loadPrivateMessages() {
             latestDocs = [];
             snap.forEach((doc) => latestDocs.push({ id: doc.id, ...doc.data() }));
             renderMessages();
-        }, (lỗi) => {
+        }, (error) => {
             console.error('Lỗi tải tin nhắn riêng:', error);
-            nếu (messagesBox) {
+            if (messagesBox) {
                 messagesBox.innerHTML = '<p style="color:#d33">Không tải được tin nhắn. Kiểm tra Firestore rules/index.</p>';
             }
         });
 }
 
-hàm bất đồng bộ sendPrivateMessage() {
+async function sendPrivateMessage() {
     const me = getCurrentUser();
     const input = document.getElementById('chat-input');
     const text = input?.value.trim();
     if (!me?.email || !selectedChatUser?.email || !text) return;
 
-    thử {
+    try {
         const now = Date.now();
         const conversationRef = getPrivateConversationRef(me.email, selectedChatUser.email);
         const docRef = getPrivateMessagesRef(me.email, selectedChatUser.email).doc();
 
         const payload = {
             chatKey: getChatKey(me.email, selectedChatUser.email),
-            người tham gia: [me.email.toLowerCase(), selectedChatUser.email.toLowerCase()],
+            participants: [me.email.toLowerCase(), selectedChatUser.email.toLowerCase()],
             senderEmail: me.email.toLowerCase(),
-            tên người gửi: me.name || tôi.email,
+            senderName: me.name || me.email,
             senderAvatar: me.avatar || buildAvatarUrl(me.name || me.email),
             receiverEmail: selectedChatUser.email.toLowerCase(),
-            chữ,
+            text,
             createdAt: now
         };
 
@@ -1343,24 +1343,24 @@ hàm bất đồng bộ sendPrivateMessage() {
         batch.set(docRef, payload);
         batch.set(conversationRef, {
             chatKey: payload.chatKey,
-            người tham gia: payload.người tham gia,
+            participants: payload.participants,
             lastSenderEmail: payload.senderEmail,
             lastSenderName: payload.senderName,
-            lastMessageText: văn bản,
-            lastMessageAt: bây giờ,
+            lastMessageText: text,
+            lastMessageAt: now,
             updatedAt: now,
             messagesPath: `private_messages/${payload.chatKey}/tin_nhan`,
             readBy: {
-                [getReadMarkerKey(payload.senderEmail)]: bây giờ
+                [getReadMarkerKey(payload.senderEmail)]: now
             }
         }, { merge: true });
-        chờ batch.commit();
+        await batch.commit();
 
-        chờ queueNotificationEvent(`chat_${docRef.id}`, {
-            loại: 'chat_new_message',
+        await queueNotificationEvent(`chat_${docRef.id}`, {
+            type: 'chat_new_message',
             messageId: docRef.id,
             senderEmail: me.email.toLowerCase(),
-            tên người gửi: me.name || tôi.email,
+            senderName: me.name || me.email,
             receiverEmail: selectedChatUser.email.toLowerCase(),
             textPreview: text.slice(0, 120),
             sentAt: now
@@ -1368,76 +1368,76 @@ hàm bất đồng bộ sendPrivateMessage() {
         const otherEmail = selectedChatUser.email.toLowerCase();
         lastMessageAtByEmail[otherEmail] = now;
         latestMessagePreviewByEmail[otherEmail] = {
-            chữ,
-            tên người gửi: me.name || tôi.email,
+            text,
+            senderName: me.name || me.email,
             isFromMe: true
         };
         if (allChatUsers.length) renderChatUsers(allChatUsers);
 
         input.value = '';
         document.getElementById('emoji-picker')?.classList.remove('show');
-    } bắt (e) {
+    } catch (e) {
         console.error('Không gửi được tin nhắn riêng:', e);
         alert('Gửi tin nhắn thất bại. Vui lòng thử lại.');
     }
 }
 
-hàm escapeHtml(giá trị = '') {
-    giá trị trả về
-        .replace(/&/g, '&')
-        .replace(/</g, '<')
-        .replace(/>/g, '>')
-        .replace(/"/g, '"')
-        .replace(/'/g, ''');
+function escapeHtml(value = '') {
+    return value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
 }
 
-hàm isSameLocalDate(a, b) {
+function isSameLocalDate(a, b) {
     return a.getFullYear() === b.getFullYear()
         && a.getMonth() === b.getMonth()
         && a.getDate() === b.getDate();
 }
 
-hàm getChatDateKey(timestamp) {
+function getChatDateKey(timestamp) {
     const ts = Number(timestamp || 0);
-    nếu (!ts) trả về '';
+    if (!ts) return '';
     const d = new Date(ts);
     return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 }
 
-hàm formatChatCenterDateTime(timestamp) {
+function formatChatCenterDateTime(timestamp) {
     const ts = Number(timestamp || 0);
-    nếu (!ts) trả về '';
+    if (!ts) return '';
     const d = new Date(ts);
     const timeText = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
     return `${timeText} ${d.getDate()} Tháng ${d.getMonth() + 1}, ${d.getFullYear()}`;
 }
 
-hàm formatChatRecencyLabel(timestamp) {
+function formatChatRecencyLabel(timestamp) {
     const ts = Number(timestamp || 0);
-    nếu (!ts) trả về '';
+    if (!ts) return '';
 
     const now = new Date();
     const d = new Date(ts);
     const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
 
     if (isSameLocalDate(d, now)) return 'Hôm nay';
-    if (isSameLocalDate(d, yesterday)) return ' Hôm qua';
+    if (isSameLocalDate(d, yesterday)) return 'Hôm qua';
 
     return `${d.getDate()} Tháng ${d.getMonth() + 1}, ${d.getFullYear()}`;
 }
 
-hàm formatLastSeenLabel(lastActiveAt) {
+function formatLastSeenLabel(lastActiveAt) {
     const ts = Number(lastActiveAt || 0);
-    nếu (!ts) trả về '';
+    if (!ts) return '';
 
     const diff = Date.now() - ts;
-    nếu (diff < 0) trả về 'Offline';
+    if (diff < 0) return 'Offline';
 
-    hằng phút = 60 * 1000;
-    hằng số giờ = 60 * phút;
-    hằng ngày = 24 * giờ;
-    hằng tuần = 7 * ngày;
-    hằng tháng = 30 * ngày;
+    const minute = 60 * 1000;
+    const hour = 60 * minute;
+    const day = 24 * hour;
+    const week = 7 * day;
+    const month = 30 * day;
 
     if (diff < minute) return 'Vừa hoạt động';
     if (diff < hour) return `${Math.max(1, Math.floor(diff / minute))} phút trước`;
@@ -1446,32 +1446,32 @@ hàm formatLastSeenLabel(lastActiveAt) {
     if (diff < week) return `${Math.floor(diff / day)} ngày trước`;
     if (diff < month) return `${Math.floor(diff / week)} tuần trước`;
 
-    Trả về 'Ngoại tuyến';
+    return 'Offline';
 }
 
-hàm formatChatTime(timestamp) {
-    nếu (!timestamp) trả về '';
+function formatChatTime(timestamp) {
+    if (!timestamp) return '';
     const d = new Date(Number(timestamp));
     return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
-hàm khởi tạo EmojiPicker() {
+function initEmojiPicker() {
     const picker = document.getElementById('emoji-picker');
-    nếu (!picker) trả về;
+    if (!picker) return;
 
     picker.innerHTML = CHAT_EMOJIS
         .map((emoji) => `<button class="emoji-item" onclick="appendEmoji('${emoji}')">${emoji}</button>`)
-        .tham gia('');
+        .join('');
 }
 
-hàm toggleEmojiPicker() {
+function toggleEmojiPicker() {
     const picker = document.getElementById('emoji-picker');
     picker?.classList.toggle('show');
 }
 
-hàm appendEmoji(emoji) {
+function appendEmoji(emoji) {
     const input = document.getElementById('chat-input');
-    nếu (!input) trả về;
+    if (!input) return;
     input.value += emoji;
     input.focus();
 }
@@ -1481,18 +1481,18 @@ function showAuthMessage(message, isError = true) {
     const ok = document.getElementById('auth-success');
     if (!err || !ok) return;
 
-    nếu (isError) {
+    if (isError) {
         err.innerText = message;
         err.style.display = 'block';
         ok.style.display = 'none';
-    } khác {
+    } else {
         ok.innerText = message;
         ok.style.display = 'block';
         err.style.display = 'none';
     }
 }
 
-hàm switchAuthTab(tab) {
+function switchAuthTab(tab) {
     const isLogin = tab === 'login';
     document.getElementById('tab-login')?.classList.toggle('active', isLogin);
     document.getElementById('tab-register')?.classList.toggle('active', !isLogin);
@@ -1503,7 +1503,7 @@ hàm switchAuthTab(tab) {
     document.getElementById('auth-success').style.display = 'none';
 }
 
-hàm bindPasswordToggle(toggleId, passwordId) {
+function bindPasswordToggle(toggleId, passwordId) {
     const toggle = document.getElementById(toggleId);
     const passwordInput = document.getElementById(passwordId);
     if (!toggle || !passwordInput) return;
@@ -1513,12 +1513,12 @@ hàm bindPasswordToggle(toggleId, passwordId) {
     });
 }   
 
-hàm initPasswordToggles() {
+function initPasswordToggles() {
     bindPasswordToggle('toggle-login-password', 'login-password');
     bindPasswordToggle('toggle-register-password', 'register-password');
 }
 
-hàm bất đồng bộ đăng ký tài khoản() {
+async function registerAccount() {
     const name = document.getElementById('register-name').value.trim();
     const phone = document.getElementById('register-phone').value.trim();
     const email = document.getElementById('register-email').value.trim().toLowerCase();
@@ -1529,29 +1529,29 @@ hàm bất đồng bộ đăng ký tài khoản() {
     if (!phoneRegex.test(phone)) return showAuthMessage('Số điện thoại chưa đúng định dạng (VD: 09xxxxxxxx).');
     if (password.length < 6) return showAuthMessage('Mật khẩu cần ít nhất 6 ký tự.');
 
-    thử {
+    try {
         const [emailSnap, phoneSnap] = await Promise.all([
             db.collection('users').where('email', '==', email).limit(1).get(),
             db.collection('users').where('phone', '==', phone).limit(1).get()
         ]);
 
-        nếu (!emailSnap.empty || !phoneSnap.empty) {
+        if (!emailSnap.empty || !phoneSnap.empty) {
             return showAuthMessage('Email hoặc số điện thoại đã được đăng ký.');
         }
 
         const avatar = buildAvatarUrl(name);    
 
         await db.collection('users').add({
-            tên,
-            điện thoại,
-            e-mail,
-            hình đại diện, 
-            mật khẩu,
+            name,
+            phone,
+            email,
+            avatar, 
+            password,
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
 
         const localAccounts = getSavedAccounts();
-        nếu (!localAccounts.some((a) => a.email === email)) {
+        if (!localAccounts.some((a) => a.email === email)) {
             localAccounts.push({ name, phone, email, avatar, password });
             saveAccounts(localAccounts);
         }
@@ -1562,14 +1562,14 @@ hàm bất đồng bộ đăng ký tài khoản() {
         document.getElementById('register-password').value = '';
 
         showAuthMessage('Tạo tài khoản thành công và đã lưu Firebase! Mời bạn đăng nhập.', false);
-        switchAuthTab('đăng nhập');
-    } bắt lỗi (error) {
+        switchAuthTab('login');
+    } catch (error) {
         console.error('Lỗi đăng ký Firebase:', error);
         showAuthMessage('Không thể đăng ký lên Firebase. Vui lòng kiểm tra quyền Firestore hoặc thử lại.');
     }
 }
 
-hàm enterMainSite() {
+function enterMainSite() {
     document.getElementById('password-screen').style.display = 'none';
     document.getElementById('main-content').style.display = 'block';
 
@@ -1577,11 +1577,11 @@ hàm enterMainSite() {
     container.style.display = 'block';
     playSong(currentSongIndex, { showToast: false, fromLogin: true });
 
-    hoa giấy ({
-        Số lượng hạt: 150,
-        Độ rộng: 70,
-        gốc: { y: 0.6 },
-        màu sắc: ['#ff4d4d', '#ffffff', '#ff7e5f']
+    confetti({
+        particleCount: 150,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: ['#ff4d4d', '#ffffff', '#ff7e5f']
     });
 
     loadGallery();
@@ -1596,7 +1596,7 @@ hàm enterMainSite() {
     initAutoPushEnableOnFirstGesture();
 }
 
-hàm bất đồng bộ đăng xuất người dùng() {
+async function logoutUser() {
     await updateMyPresence().catch(() => {});
     stopPresenceTracking();
     if (usersUnsubscribe) { usersUnsubscribe(); usersUnsubscribe = null; }
@@ -1605,24 +1605,24 @@ hàm bất đồng bộ đăng xuất người dùng() {
     if (chatConversationUnsubscribe) { chatConversationUnsubscribe(); chatConversationUnsubscribe = null; }
     if (galleryUnsubscribe) { galleryUnsubscribe(); galleryUnsubscribe = null; }
     const current = getCurrentUser();
-    nếu (email hiện tại?) {
-        thử {
+    if (current?.email) {
+        try {
             const snap = await db.collection('users').where('email', '==', current.email).limit(1).get();
-            nếu (!snap.empty) {
+            if (!snap.empty) {
                 await db.collection('users').doc(snap.docs[0].id).update({ isOnline: false, lastActiveAt: Date.now() });
             }
-        } bắt (e) {}
+        } catch (e) {}
     }
     localStorage.removeItem(SESSION_KEY);
     updatePushButtonState(false);
     document.getElementById('main-content').style.display = 'none';
     document.getElementById('password-screen').style.display = 'flex';
-    nếu (âm thanh) {
+    if (audio) {
         audio.pause();
         syncMusicUI(false);
     }
     showAuthMessage('Bạn đã đăng xuất.', false);
-    switchAuthTab('đăng nhập');
+    switchAuthTab('login');
 }
 
 // 2. Hàm Tải Ảnh từ Firebase (Quan trọng nhất)
@@ -1641,10 +1641,10 @@ const audio = document.getElementById('bg-music');
 function syncMusicUI(isPlaying) {
     const playPauseIcon = document.getElementById('play-pause-icon');
     const musicIcon = document.getElementById('music-icon');
-    nếu (playPauseIcon) {
+    if (playPauseIcon) {
         playPauseIcon.className = isPlaying ? 'fas fa-pause' : 'fas fa-play';
     }
-    nếu (biểu tượng âm nhạc) {
+    if (musicIcon) {
         musicIcon.classList.toggle('rotating', isPlaying);
     }
 }
@@ -1652,12 +1652,12 @@ function syncMusicUI(isPlaying) {
 
 let shouldResumeMusicOnGesture = false;
 
-hàm requestMusicResumeOnGesture() {
-    nếu (shouldResumeMusicOnGesture) trả về;
+function requestMusicResumeOnGesture() {
+    if (shouldResumeMusicOnGesture) return;
     shouldResumeMusicOnGesture = true;
 
     const resume = () => {
-        nếu (!audio) trả về;
+        if (!audio) return;
         audio.play().then(() => {
             shouldResumeMusicOnGesture = false;
             document.removeEventListener('click', resume, true);
@@ -1669,7 +1669,7 @@ hàm requestMusicResumeOnGesture() {
     document.addEventListener('touchstart', resume, true);
 }
 
-nếu (âm thanh) {
+if (audio) {
     audio.loop = false;
     audio.removeEventListener('ended', changeMusic);
     audio.addEventListener('ended', changeMusic);
@@ -1678,7 +1678,7 @@ nếu (âm thanh) {
 }
 
 // 2. Hàm mở Menu nhạc
-hàm toggleMusicMenu() {
+function toggleMusicMenu() {
     const btn = document.getElementById('main-music-btn');
     const options = document.getElementById('music-options');
     const panel = document.getElementById('playlist-panel'); // Lấy thêm bảng danh sách
@@ -1687,7 +1687,7 @@ hàm toggleMusicMenu() {
     options.classList.toggle('show');
 
     // NẾU menu chính đóng lại (không còn class active)
-    nếu (!btn.classList.contains('active')) {
+    if (!btn.classList.contains('active')) {
         // Thì ẩn luôn bảng danh sách nhạc nếu nó đang mở
         if (panel) panel.style.display = 'none';
     }
@@ -1706,31 +1706,31 @@ function showMusicToast(songName) {
 }
 
 // 3. Hàm ẩn hiện danh sách bài hát
-hàm togglePlaylistMenu() {
+function togglePlaylistMenu() {
     const panel = document.getElementById('playlist-panel');
     panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
     if(panel.style.display === 'block') renderPlaylist();
 }
 
-hàm renderPlaylist() {
+function renderPlaylist() {
     const listUI = document.getElementById('song-list');
     listUI.innerHTML = playlist.map((song, i) => 
         `<li onclick="playSong(${i})">${i === currentSongIndex ? '▶ ' : ''}${song.name}</li>`
-    ).tham gia('');
+    ).join('');
 }
 
-hàm playSong(index, options = {}) {
+function playSong(index, options = {}) {
     if (!audio || !playlist[index]) return;
 
     const { showToast = true, fromLogin = false } = options;
     currentSongIndex = index;
 
     const nextUrl = playlist[index].url;
-    nếu (audio.src !== nextUrl) {
+    if (audio.src !== nextUrl) {
         audio.pause();
         audio.src = nextUrl;
         audio.load();
-    } khác {
+    } else {
         audio.currentTime = 0;
     }
 
@@ -1738,65 +1738,65 @@ hàm playSong(index, options = {}) {
         if (showToast) showMusicToast(playlist[index].name);
     }).catch((e) => {
         console.log('Nhạc bị chặn:', e);
-        nếu (từ đăng nhập) yêu cầu tiếp tục phát nhạc khi có cử chỉ (Gesture());
+        if (fromLogin) requestMusicResumeOnGesture();
     });
 
     renderPlaylist();
 }
 
-hàm toggleMusic() {
-    nếu (!audio) trả về;
+function toggleMusic() {
+    if (!audio) return;
 
-    nếu (!audio.src) {
-        phát bài hát(chỉ số bài hát hiện tại);
-        trở lại;
+    if (!audio.src) {
+        playSong(currentSongIndex);
+        return;
     }
 
-    nếu (âm thanh tạm dừng) {
+    if (audio.paused) {
         audio.play().catch((e) => console.log('Nhạc bị chặn:', e));
-    } khác {
+    } else {
         audio.pause();
     }
 }
 
 function pauseMusicForBackground({ reset = false } = {}) {
-    nếu (!audio) trả về;
+    if (!audio) return;
     const wasPlaying = !audio.paused;
 
     audio.pause();
-    nếu (đặt lại) audio.currentTime = 0;
+    if (reset) audio.currentTime = 0;
     if (wasPlaying || reset) syncMusicUI(false);
 }
 
-hàm changeMusic() {
+function changeMusic() {
     currentSongIndex = (currentSongIndex + 1) % playlist.length;
-    phát bài hát(chỉ số bài hát hiện tại);
+    playSong(currentSongIndex);
 }
 
-hàm lọc theo năm (năm) {
-    currentYearFilter = năm;
+function filterByYear(year) {
+    currentYearFilter = year;
     // Cập nhật giao diện nút bấm
     document.querySelectorAll('.filter-btn').forEach(btn => {
         btn.classList.remove('active');
-        if(btn.innerText.includes(year) || (năm === 'tất cả' && btn.innerText === 'Tất cả')) {
+        if(btn.innerText.includes(year) || (year === 'all' && btn.innerText === 'Tất cả')) {
             btn.classList.add('active');
         }
     });
     loadGallery(); // Tải lại ảnh theo năm đã chọn
 }
 
-hàm loadGallery() {
+function loadGallery() {
     const gallery = document.getElementById('galleryGrid');
-    nếu (!gallery) trả về;
+    if (!gallery) return;
 
-    nếu (galleryUnsubscribe) {
+    if (galleryUnsubscribe) {
         galleryUnsubscribe();
         galleryUnsubscribe = null;
     }
 
     let query = db.collection("posts").orderBy("createdAt", "desc");
-    nếu (currentYearFilter !== 'all') {
-        truy vấn = truy vấn.where("năm", "==", currentYearFilter);
+    if (currentYearFilter !== 'all') {
+        query = query.where("year", "==", currentYearFilter);
     }
 
     galleryUnsubscribe = query.onSnapshot((snapshot) => {
@@ -1811,26 +1811,26 @@ hàm loadGallery() {
                             fileUrl.toLowerCase().includes('cloudinary');
 
             let mediaHtml = "";
-            nếu (isVideo) {
+            if (isVideo) {
             // Tạo link ảnh đại diện tự động từ Cloudinary
-            hãy để posterUrl = fileUrl.replace("/upload/", "/upload/so_0/").replace(/\.[^/.]+$/, ".jpg");
+            let posterUrl = fileUrl.replace("/upload/", "/upload/so_0/").replace(/\.[^/.]+$/, ".jpg");
 
             mediaHtml = `
                 <div class="video-preview-container" onclick="openLightbox('${fileUrl}', true)">
                     <video 
                         src="${fileUrl}" 
                         poster="${posterUrl}"
-                        tải trước="siêu dữ liệu" 
-                        chơi trực tuyến
-                        bị tắt tiếng
-                        vòng lặp>
+                        preload="metadata" 
+                        playsinline
+                        muted
+                        loop>
                         style="width:100%; height:250px; object-fit: cover; border-radius: 8px;">
                     </video>
                     <div class="play-button-overlay">▶</div>
                 </div>`;
-            } khác {
+            } else {
                 // Với ảnh: truyền link trực tiếp vào hàm openLightbox
-                mediaHtml = `<img src="${fileUrl}" onclick="openLightbox('${fileUrl}', false)" loading="lazy" alt="Kỷý">`;
+                mediaHtml = `<img src="${fileUrl}" onclick="openLightbox('${fileUrl}', false)" loading="lazy" alt="Kỷ niệm">`;
             }
 
             const heartUsers = data.heartUsers || [];
@@ -1838,16 +1838,16 @@ hàm loadGallery() {
             const comments = data.comments || [];
             const commentHtml = comments.map(c => {
                 const avatar = c.avatar || buildAvatarUrl(c.user || 'Thành viên');
-                trả về `
+                return `
                     <div class="each-comment">
                         <img class="comment-avatar" src="${avatar}" alt="avatar">
                         <div class="comment-text"><b>${c.user}:</b> ${c.text}</div>
                     </div>
                 `;
-            }).tham gia('');
+            }).join('');
 
             // Tạo danh sách tên để hiện khi rê chuột vào (Tooltip)
-            const heartListHtml = heartUsers.length > 0 ? heartUsers.join("<br>") : "Chưa có ai trả lời";
+            const heartListHtml = heartUsers.length > 0 ? heartUsers.join("<br>") : "Chưa có ai thả tim";
             const hahaListHtml = hahaUsers.length > 0 ? hahaUsers.join("<br>") : "Chưa có ai haha";
 
             const card = document.createElement('div');
@@ -1886,15 +1886,15 @@ hàm loadGallery() {
 
             // Khởi tạo hiệu ứng nghiêng 3D
             VanillaTilt.init(card, {
-                tối đa: 15,
-                tốc độ: 400,
-                ánh sáng chói: đúng,
-                "Độ chói tối đa": 0.5,
-                con quay hồi chuyển: đúng,
-                tỉ lệ: 1,05
+                max: 15,
+                speed: 400,
+                glare: true,
+                "max-glare": 0.5,
+                gyroscope: true,
+                scale: 1.05
             });
 
-            nếu (pendingScrollPostId && pendingScrollPostId === doc.id) {
+            if (pendingScrollPostId && pendingScrollPostId === doc.id) {
                 setTimeout(() => focusGalleryPost(doc.id), 150);
                 pendingScrollPostId = null;
             }
@@ -1910,7 +1910,7 @@ async function syncUserAvatarInAllComments(userEmail, oldName, newName, newAvata
     const normalizedEmail = (userEmail || '').toLowerCase();
     if (!normalizedEmail && !oldName && !newName) return;
 
-    thử {
+    try {
         const postSnap = await db.collection('posts').get();
         if (postSnap.empty) return;
 
@@ -1926,23 +1926,23 @@ async function syncUserAvatarInAllComments(userEmail, oldName, newName, newAvata
                 const isSameUser = (normalizedEmail && commentEmail === normalizedEmail)
                     || (!!commentName && [oldName, newName].filter(Boolean).includes(commentName));
 
-                nếu (!isSameUser) trả về bình luận;
+                if (!isSameUser) return comment;
 
-                đã thay đổi = đúng;
-                trở lại {
-                    ...bình luận,
-                    người dùng: newName || commentName,
+                changed = true;
+                return {
+                    ...comment,
+                    user: newName || commentName,
                     userEmail: normalizedEmail || commentEmail,
                     avatar: newAvatar || comment.avatar || buildAvatarUrl(newName || commentName || 'Thành viên')
                 };
             });
 
-            nếu (đã thay đổi) {
+            if (changed) {
                 updates.push({ docId: doc.id, comments: nextComments });
             }
         });
 
-        nếu (!updates.length) trả về;
+        if (!updates.length) return;
 
         const chunkSize = 400;
         for (let i = 0; i < updates.length; i += chunkSize) {
@@ -1951,14 +1951,14 @@ async function syncUserAvatarInAllComments(userEmail, oldName, newName, newAvata
             chunk.forEach((item) => {
                 batch.update(db.collection('posts').doc(item.docId), { comments: item.comments });
             });
-            chờ batch.commit();
+            await batch.commit();
         }
-    } bắt lỗi (error) {
+    } catch (error) {
         console.warn('Không thể đồng bộ avatar vào bình luận cũ:', error);
     }
 }
 
-hàm getUserName() {
+function getUserName() {
     const user = getCurrentUser();
     if (user?.name) return user.name;
 
@@ -1967,10 +1967,10 @@ hàm getUserName() {
 }
 
 // Hàm gửi bình luận đã nâng cấp
-hàm bất đồng bộ addComment(postId) {
+async function addComment(postId) {
     const input = document.getElementById(`input-${postId}`);
     const text = input.value.trim();
-    nếu (!text) trả về;
+    if (!text) return;
 
     // Lấy tên người dùng trước khi gửi
     const userName = getUserName();
@@ -1979,46 +1979,46 @@ hàm bất đồng bộ addComment(postId) {
     const userEmail = (currentUser?.email || '').toLowerCase();
 
     const postRef = db.collection("posts").doc(postId);
-    thử {
-        chờ postRef.update({
-            bình luận: firebase.firestore.FieldValue.arrayUnion({
+    try {
+        await postRef.update({
+            comments: firebase.firestore.FieldValue.arrayUnion({
                 user: userName, // Sử dụng tên vừa lấy được
-                Email người dùng,
+                userEmail,
                 avatar: avatar,
-                văn bản: văn bản,
-                thời gian: Date.now()
+                text: text,
+                time: Date.now()
             })
         });
         input.value = ""; 
-    } bắt lỗi (error) {
+    } catch (error) {
         console.error("Lỗi khi gửi bình luận: ", error);
         alert("Không thể gửi bình luận, vui lòng thử lại!");
     }
 }
 
 // Thêm tính năng: Nhấn Enter để gửi bình luận nhanh
-hàm checkCommentEnter(e, postId) {
-    nếu (e.key === "Enter") {
+function checkCommentEnter(e, postId) {
+    if (e.key === "Enter") {
         addComment(postId);
     }
 }
 
 
 // 3. Hàm Thả Tim/Haha (Cập nhật lên Firebase)
-hàm handleReact(postId, type) {
+function handleReact(postId, type) {
     const postRef = db.collection("posts").doc(postId);
     const increment = firebase.firestore.FieldValue.increment(1);
     
-    nếu (type === 'hearts') {
+    if (type === 'hearts') {
         postRef.update({ hearts: increment });
-    } khác {
+    } else {
         postRef.update({ hahas: increment });
     }
 }
 
 // 4. Đồng hồ đếm ngược (Sửa lỗi không chạy)
-hàm startCountdown() {
-    const examDate = new Date("Ngày 12 tháng 6 năm 2026 00:00:00").getTime();
+function startCountdown() {
+    const examDate = new Date("June 12, 2026 00:00:00").getTime();
 
     const timer = setInterval(function() {
         const now = new Date().getTime();
@@ -2037,7 +2037,7 @@ hàm startCountdown() {
             document.getElementById("seconds").innerHTML = s < 10 ? "0" + s : s;
         }
 
-        nếu (khoảng cách < 0) {
+        if (distance < 0) {
             clearInterval(timer);
             document.getElementById("timer").innerHTML = "CHÚC CẢ LỚP THI TỐT! 🎓";
         }
@@ -2045,35 +2045,35 @@ hàm startCountdown() {
 }
 
 // 5. Kiểm tra mật khẩu và khởi động web
-hàm bất đồng bộ checkPassword() {
+async function checkPassword() {
     const loginIdentifier = document.getElementById('login-identifier').value.trim();
     const normalizedIdentifier = loginIdentifier.toLowerCase();
     const password = document.getElementById('login-password').value;
     if (!loginIdentifier || !password) return showAuthMessage('Vui lòng nhập email hoặc số điện thoại cùng mật khẩu để đăng nhập.');
 
-    thử {
+    try {
         const [emailSnap, phoneSnap] = await Promise.all([
             db.collection('users')
                 .where('email', '==', normalizedIdentifier)
                 .where('password', '==', password)
                 .limit(1)
-                .lấy(),
+                .get(),
             db.collection('users')
                 .where('phone', '==', loginIdentifier)
                 .where('password', '==', password)
                 .limit(1)
-                .lấy()
+                .get()
         ]);
 
         let account = null;
-        nếu (!emailSnap.empty) {
-            tài khoản = emailSnap.docs[0].data();
+        if (!emailSnap.empty) {
+            account = emailSnap.docs[0].data();
         } else if (!phoneSnap.empty) {
-            tài khoản = phoneSnap.docs[0].data();
-        } khác {
+            account = phoneSnap.docs[0].data();
+        } else {
             const accounts = getSavedAccounts();
-            tài khoản = tài khoản.find((a) =>
-                (a.email === normalizedIdentifier || a.phone === loginIdentifier) ​​​​&& a.password === mật khẩu
+            account = accounts.find((a) =>
+                (a.email === normalizedIdentifier || a.phone === loginIdentifier) && a.password === password
             ) || null;
         }
 
@@ -2084,15 +2084,15 @@ hàm bất đồng bộ checkPassword() {
         localStorage.setItem('class_user_name', account.name);
         showAuthMessage('Đăng nhập thành công!', false);
         enterMainSite();
-    } bắt lỗi (error) {
+    } catch (error) {
         console.error('Lỗi đăng nhập Firebase:', error);
         showAuthMessage('Không đăng nhập được do lỗi kết nối Firebase.');
     }
 }
 
-hàm createLeaves() {
+function createLeaves() {
     const container = document.getElementById('leaf-container');
-    nếu (!container) trả về;
+    if (!container) return;
     container.innerHTML = ''; 
 
     for (let i = 0; i < 25; i++) {
@@ -2116,15 +2116,15 @@ hàm createLeaves() {
 }
 
 // 6. Các hàm bổ trợ (Lightbox, Hiệu ứng rơi...)
-hàm openLightbox(url, isVideo) {
+function openLightbox(url, isVideo) {
     const lightbox = document.getElementById('lightbox');
     const content = document.getElementById('lightboxContent');
     
     content.innerHTML = ""; // Xóa nội dung cũ
     
-    nếu (isVideo) {
+    if (isVideo) {
         content.innerHTML = `<video src="${url}" controls autoplay style="max-width:100%; max-height:80vh;"></video>`;
-    } khác {
+    } else {
         content.innerHTML = `<img src="${url}" style="max-width:100%; max-height:80vh;">`;
     }
     
@@ -2133,9 +2133,9 @@ hàm openLightbox(url, isVideo) {
 
 function closeLightbox() { document.getElementById('lightbox').style.display = 'none'; }
 
-hàm createLeaves() {
+function createLeaves() {
     const container = document.getElementById('leaf-container');
-    nếu (!container) trả về;
+    if (!container) return;
     
     container.innerHTML = ''; // Xóa sạch nếu có hoa cũ
     const leafCount = 30; // Số lượng cánh hoa
@@ -2156,7 +2156,7 @@ hàm createLeaves() {
         leaf.style.left = startLeft + '%';
         leaf.style.width = size + 'px';
         leaf.style.height = (size * 0.8) + 'px'; // Cánh hoa hơi thon
-        leaf.style.animationDuration = duration + 's, 3s'; // Thời lượng cho 'rơi' và 'đung đưa'
+        leaf.style.animationDuration = duration + 's, 3s'; // Duration cho 'fall' và 'swing'
         leaf.style.animationDelay = delay + 's, 0s';
         leaf.style.opacity = Math.random() * 0.5 + 0.5; // Độ trong suốt ngẫu nhiên
 
@@ -2164,18 +2164,18 @@ hàm createLeaves() {
     }
 }
 
-hàm showSurprise() {
+function showSurprise() {
     const allCards = document.querySelectorAll('.media-wrap');
     if (allCards.length === 0) return;
 
     const randomIndex = Math.floor(Math.random() * allCards.length);
     const randomCard = allCards[randomIndex];
     const media = randomCard.querySelector('img, video');
-    nếu (!media) trả về;
+    if (!media) return;
 
     const isVideo = media.tagName.toLowerCase() === 'video';
     const sourceUrl = media.getAttribute('src') || media.currentSrc;
-    nếu (!sourceUrl) trả về;
+    if (!sourceUrl) return;
 
     openLightbox(sourceUrl, isVideo);
 }
@@ -2186,23 +2186,23 @@ document.getElementById('login-password')?.addEventListener('keypress', (e) => {
 });
 
 function resizeImageToDataUrl(file, maxSize = 640, quality = 0.85) {
-    trả về Promise mới((resolve, reject) => {
+    return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => {
             const img = new Image();
             img.onload = () => {
                 let { width, height } = img;
                 const scale = Math.min(1, maxSize / Math.max(width, height));
-                chiều rộng = Math.max(1, Math.round(chiều rộng * tỷ lệ));
-                chiều cao = Math.max(1, Math.round(chiều cao * tỉ lệ));
+                width = Math.max(1, Math.round(width * scale));
+                height = Math.max(1, Math.round(height * scale));
 
                 const canvas = document.createElement('canvas');
                 canvas.width = width;
-                canvas.height = chiều cao;
+                canvas.height = height;
                 const ctx = canvas.getContext('2d');
-                nếu (!ctx) {
+                if (!ctx) {
                     reject(new Error('Canvas không khả dụng'));
-                    trở lại;
+                    return;
                 }
 
                 ctx.drawImage(img, 0, 0, width, height);
@@ -2216,8 +2216,8 @@ function resizeImageToDataUrl(file, maxSize = 640, quality = 0.85) {
     });
 }
 
-hàm fileToDataUrl(file) {
-    trả về Promise mới((resolve, reject) => {
+function fileToDataUrl(file) {
+    return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(String(reader.result || ''));
         reader.onerror = () => reject(new Error('Không thể đọc file ảnh gốc'));
@@ -2225,19 +2225,19 @@ hàm fileToDataUrl(file) {
     });
 }
 
-hàm bất đồng bộ handleProfileAvatarFileChange(event) {
+async function handleProfileAvatarFileChange(event) {
     const file = event?.target?.files?.[0];
-    nếu (!tệp tin) trả về;
+    if (!file) return;
 
-    nếu (!file.type.startsWith('image/')) {
+    if (!file.type.startsWith('image/')) {
         alert('Vui lòng chọn file ảnh hợp lệ.');
         event.target.value = '';
-        trở lại;
+        return;
     }
 
-    thử {
+    try {
         let dataUrl = '';
-        thử {
+        try {
             dataUrl = await resizeImageToDataUrl(file);
         } catch (resizeError) {
             // Một số thiết bị/iOS (đặc biệt HEIC) có thể không decode được qua canvas.
@@ -2250,14 +2250,14 @@ hàm bất đồng bộ handleProfileAvatarFileChange(event) {
         const preview = document.getElementById('profile-avatar-preview');
 
         if (avatarInput) avatarInput.value = dataUrl;
-        nếu (xem trước) preview.src = dataUrl;
-    } bắt lỗi (error) {
+        if (preview) preview.src = dataUrl;
+    } catch (error) {
         console.error('Lỗi xử lý ảnh avatar:', error);
         alert('Không thể xử lý ảnh. Vui lòng thử ảnh khác hoặc dùng link ảnh.');
     }
 }
 
-hàm openProfileModal() {
+function openProfileModal() {
     const user = normalizeUserAvatar(getCurrentUser());
     if (!user) return alert('Bạn cần đăng nhập để xem hồ sơ.');
 
@@ -2271,14 +2271,14 @@ hàm openProfileModal() {
     document.getElementById('profile-modal').style.display = 'flex';
 }
 
-hàm closeProfileModal() {
+function closeProfileModal() {
     const modal = document.getElementById('profile-modal');
     if (modal) modal.style.display = 'none';
 }
 
-    hàm bất đồng bộ saveProfile() {
+    async function saveProfile() {
     const user = normalizeUserAvatar(getCurrentUser());
-    nếu (!user) trả về;
+    if (!user) return;
 
     const oldName = user.name || '';
     const name = document.getElementById('profile-name').value.trim();
@@ -2288,15 +2288,15 @@ hàm closeProfileModal() {
 
     if (!name || !phone) return alert('Vui lòng nhập đầy đủ họ tên và số điện thoại.');
 
-    thử {
+    try {
         const snap = await db.collection('users').where('email', '==', user.email).limit(1).get();
-        nếu (!snap.empty) {
+        if (!snap.empty) {
             await db.collection('users').doc(snap.docs[0].id).update({ name, phone, avatar });
         }
 
         const accounts = getSavedAccounts();
         const idx = accounts.findIndex((a) => a.email === user.email);
-        nếu (idx !== -1) {
+        if (idx !== -1) {
             accounts[idx].name = name;
             accounts[idx].phone = phone;
             accounts[idx].avatar = avatar;
@@ -2310,41 +2310,41 @@ hàm closeProfileModal() {
         updateCurrentUserDisplay();
         closeProfileModal();
         alert('Đã cập nhật hồ sơ thành công!');
-    } bắt lỗi (error) {
+    } catch (error) {
         console.error('Lỗi cập nhật hồ sơ:', error);
         alert('Không thể cập nhật hồ sơ. Vui lòng thử lại.');
     }
 }
 
 // Hàm xử lý thả cảm xúc (Lưu danh sách tên)
-hàm bất đồng bộ handleReact(postId, type) {
+async function handleReact(postId, type) {
     const userName = getUserName(); // Lấy tên người dùng đã lưu hoặc hỏi tên
     const postRef = db.collection("posts").doc(postId);
     
     const field = type === 'hearts' ? 'heartUsers' : 'hahaUsers';
 
-    thử {
+    try {
         const doc = await postRef.get();
         const data = doc.data();
         const userList = data[field] || [];
 
-        nếu (userList.includes(userName)) {
+        if (userList.includes(userName)) {
             // Nếu đã thả rồi thì "Bỏ thích" (Xóa khỏi mảng)
-            chờ postRef.update({
+            await postRef.update({
                 [field]: firebase.firestore.FieldValue.arrayRemove(userName)
             });
-        } khác {
+        } else {
             // Nếu chưa thả thì "Thêm vào" (Thêm vào mảng)
-            chờ postRef.update({
+            await postRef.update({
                 [field]: firebase.firestore.FieldValue.arrayUnion(userName)
             });
         }
-    } bắt lỗi (error) {
+    } catch (error) {
         console.error("Lỗi tương tác:", error);
     }
 }
 
-hàm bất đồng bộ sendTimeCapsule() {
+async function sendTimeCapsule() {
     const user = getCurrentUser();
     const sender = document.getElementById('capsule-sender').value.trim() || user?.name || '';
     const msg = document.getElementById('capsule-message').value.trim();
@@ -2352,11 +2352,11 @@ hàm bất đồng bộ sendTimeCapsule() {
     
     if (!sender || !msg || !unlockDateValue) return alert("Vui lòng nhập đủ tên, lời nhắn và chọn ngày mở!");
 
-    thử {
+    try {
         await db.collection("messages").add({
-            người gửi: người gửi,
+            sender: sender,
             senderEmail: (user?.email || '').toLowerCase(),
-            tin nhắn: msg,
+            message: msg,
             unlockDate: unlockDateValue, // Lưu ngày người dùng chọn
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
@@ -2364,17 +2364,17 @@ hàm bất đồng bộ sendTimeCapsule() {
         alert("💌 Thư đã được khóa lại cho đến ngày " + unlockDateValue);
         document.getElementById('capsule-message').value = '';
         document.getElementById('unlock-date-input').value = '';
-    } Catch (e) { cảnh báo("Lỗi: " + e.message); }
+    } catch (e) { alert("Lỗi: " + e.message); }
 }
 
 
 // Hàm lọc thư ngay trên giao diện
-hàm filterCapsules() {
+function filterCapsules() {
     const searchText = document.getElementById('search-sender').value.toLowerCase();
     const statusFilter = document.getElementById('filter-status').value;
     const cards = document.querySelectorAll('.capsule-card');
 
-    thẻ.forEach(thẻ => {
+    cards.forEach(card => {
         const sender = card.querySelector('strong').innerText.toLowerCase();
         const isLocked = card.classList.contains('locked');
         
@@ -2383,9 +2383,9 @@ hàm filterCapsules() {
                           (statusFilter === 'locked' && isLocked) || 
                           (statusFilter === 'unlocked' && !isLocked);
 
-        nếu (matchSearch && matchStatus) {
+        if (matchSearch && matchStatus) {
             card.style.display = "flex";
-        } khác {
+        } else {
             card.style.display = "none";
         }
     });
@@ -2394,14 +2394,14 @@ hàm filterCapsules() {
 // Khai báo biến giới hạn cho phần Grid bên dưới
 let limitCount = 6; 
 
-hàm getFeaturedCarouselLimit() {
+function getFeaturedCarouselLimit() {
     const width = window.innerWidth || 390;
     if (width <= 420) return 4;
     if (width <= 560) return 5;
-    trả về 6;
+    return 6;
 }
 
-hàm loadTimeCapsuleMessages() {
+function loadTimeCapsuleMessages() {
     const today = new Date().toLocaleDateString('sv-SE');
 
     db.collection("messages").orderBy("unlockDate", "asc").onSnapshot((snapshot) => {
@@ -2427,7 +2427,7 @@ hàm loadTimeCapsuleMessages() {
         });
 
          // --- PHẦN 1: RENDER VÒNG QUAY (TOP N linh hoạt theo màn hình) ---
-        nếu (carouselDiv) {
+        if (carouselDiv) {
             carouselDiv.innerHTML = "";
             const isMobile = window.matchMedia('(max-width: 768px)').matches;
             const featuredCount = isMobile ? getFeaturedCarouselLimit() : 6;
@@ -2460,7 +2460,7 @@ hàm loadTimeCapsuleMessages() {
             const card = createCardMarkup(data, isLocked);
             card.className += ` ${isNewLoad ? 'fly-in' : ''}`;
             
-            nếu (isNewLoad) {
+            if (isNewLoad) {
                 card.style.animationDelay = `${(index % 6) * 0.15}s`;
             }
 
@@ -2468,7 +2468,7 @@ hàm loadTimeCapsuleMessages() {
         });
 
         // Điều khiển nút Xem thêm
-        nếu (loadMoreBtn) {
+        if (loadMoreBtn) {
             loadMoreBtn.style.display = (allMessages.length > limitCount) ? "inline-block" : "none";
         }
 
@@ -2476,7 +2476,7 @@ hàm loadTimeCapsuleMessages() {
     });
 }
 
-hàm formatUnlockCountdown(unlockDate) {
+function formatUnlockCountdown(unlockDate) {
     const unlockTime = new Date(`${unlockDate}T00:00:00`).getTime();
     const now = Date.now();
     const distance = unlockTime - now;
@@ -2491,20 +2491,20 @@ hàm formatUnlockCountdown(unlockDate) {
     return `${days} ngày ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 }
 
-hàm updateLetterCountdowns() {
+function updateLetterCountdowns() {
     document.querySelectorAll('.letter-unlock-countdown').forEach((el) => {
         const unlockDate = el.dataset.unlockDate;
-        nếu (!unlockDate) trả về;
+        if (!unlockDate) return;
         el.innerText = formatUnlockCountdown(unlockDate);
     });
 }
 
 // HÀM QUAN TRỌNG: Tạo HTML cho thẻ thư (Dùng chung cho cả 2 phần)
-hàm createCardMarkup(data, isLocked) {
+function createCardMarkup(data, isLocked) {
     const card = document.createElement('div');
     card.className = `capsule-card ${isLocked ? 'locked' : 'unlocked'}`;
     
-    nếu (!isLocked) {
+    if (!isLocked) {
         card.onclick = () => openLetter(data);
     }
 
@@ -2527,7 +2527,7 @@ hàm createCardMarkup(data, isLocked) {
         </div>
     `;
 
-    nếu (!isLocked) {
+    if (!isLocked) {
         const replyBtn = card.querySelector('.letter-reply-mini-btn');
         replyBtn?.addEventListener('click', (event) => {
             event.stopPropagation();
@@ -2535,72 +2535,72 @@ hàm createCardMarkup(data, isLocked) {
             toggleLetterReplyComposer();
         });
     }
-    thẻ trả lại;
+    return card;
 }
 
 // Hàm khi nhấn nút Tải thêm
-hàm loadMoreCapsules() {
+function loadMoreCapsules() {
     limitCount += 10; // Tăng thêm 10 thư mỗi lần nhấn
     loadTimeCapsuleMessages(); // Tải lại danh sách
 }
 
 // Hàm mở Modal thư to
-hàm resetLetterReplyComposer() {
+function resetLetterReplyComposer() {
     const box = document.getElementById('letter-reply-box');
     const input = document.getElementById('letter-reply-input');
     if (box) box.style.display = 'none';
-    nếu (đầu vào) input.value = '';
+    if (input) input.value = '';
 }
 
-hàm toggleLetterReplyComposer() {
+function toggleLetterReplyComposer() {
     const box = document.getElementById('letter-reply-box');
     const input = document.getElementById('letter-reply-input');
-    nếu (!box) trả về;
+    if (!box) return;
 
     const isVisible = box.style.display === 'block';
     box.style.display = isVisible ? 'none' : 'block';
     if (!isVisible) input?.focus();
 }
 
-hàm bất đồng bộ findUserForCapsuleReply(letter) {
+async function findUserForCapsuleReply(letter) {
     const senderEmail = (letter?.senderEmail || '').toLowerCase();
     const senderName = (letter?.sender || '').trim().toLowerCase();
     const me = getCurrentUser();
 
-    nếu (email người gửi) {
+    if (senderEmail) {
         const byEmail = allChatUsers.find((u) => (u.email || '').toLowerCase() === senderEmail);
-        nếu (byEmail) trả về byEmail;
+        if (byEmail) return byEmail;
     }
 
-    nếu (tên người gửi) {
+    if (senderName) {
         const byName = allChatUsers.find((u) => (u.name || '').trim().toLowerCase() === senderName);
-        nếu (byName) trả về byName;
+        if (byName) return byName;
     }
 
-    thử {
-        nếu (email người gửi) {
+    try {
+        if (senderEmail) {
             const snapByEmail = await db.collection('users').where('email', '==', senderEmail).limit(1).get();
-            nếu (!snapByEmail.empty) {
-                trả về normalizeUserAvatar(snapByEmail.docs[0].data());
+            if (!snapByEmail.empty) {
+                return normalizeUserAvatar(snapByEmail.docs[0].data());
             }
         }
 
-        nếu (tên người gửi) {
+        if (senderName) {
             const snapByName = await db.collection('users').where('name', '==', letter.sender).limit(1).get();
-            nếu (!snapByName.empty) {
+            if (!snapByName.empty) {
                 const found = snapByName.docs.map((d) => normalizeUserAvatar(d.data()))
                     .find((u) => (u.email || '').toLowerCase() !== (me?.email || '').toLowerCase());
-                nếu (đã tìm thấy) trả về kết quả đã tìm thấy;
+                if (found) return found;
             }
         }
-    } bắt lỗi (error) {
+    } catch (error) {
         console.warn('Không tìm được người viết thư để nhắn tin:', error);
     }
 
-    trả về null;
+    return null;
 }
 
-hàm buildCapsuleReplyMessage(letter, replyText) {
+function buildCapsuleReplyMessage(letter, replyText) {
     const sender = letter?.sender || 'Bạn';
     const unlockDate = letter?.unlockDate || '';
     const letterBody = (letter?.message || '').trim();
@@ -2613,7 +2613,7 @@ hàm buildCapsuleReplyMessage(letter, replyText) {
 ${myText}`.trim();
 }
 
-hàm bất đồng bộ sendReplyToCapsuleAuthor() {
+async function sendReplyToCapsuleAuthor() {
     const me = getCurrentUser();
     if (!me?.email) return alert('Bạn cần đăng nhập để gửi tin nhắn.');
     if (!currentOpenedLetter || !currentOpenedLetter.message) return alert('Không tìm thấy thông tin bức thư để phản hồi.');
@@ -2623,7 +2623,7 @@ hàm bất đồng bộ sendReplyToCapsuleAuthor() {
     if (!replyText) return alert('Hãy nhập lời nhắn trước khi gửi.');
 
     const targetUser = await findUserForCapsuleReply(currentOpenedLetter);
-    nếu (!targetUser?.email) {
+    if (!targetUser?.email) {
         return alert('Không tìm thấy tài khoản của người viết thư để mở chat riêng.');
     }
 
@@ -2635,32 +2635,32 @@ hàm bất đồng bộ sendReplyToCapsuleAuthor() {
     closeLetter();
 
     const chatInput = document.getElementById('chat-input');
-    nếu (!chatInput) trả về;
+    if (!chatInput) return;
 
     chatInput.value = buildCapsuleReplyMessage(currentOpenedLetter, replyText);
-    chờ gửi tin nhắn riêng tư();
+    await sendPrivateMessage();
     resetLetterReplyComposer();
     showSystemToast(`Đã gửi phản hồi đến ${targetUser.name || targetUser.email}`, { icon: '📨', title: 'Phản hồi thư thành công' });
 }
 
-hàm openLetter(letter) {
+function openLetter(letter) {
     currentOpenedLetter = letter || null;
     document.getElementById('modal-sender').innerText = "Từ: " + (letter?.sender || 'Không rõ');
-    document.getElementById('modal-date').innerText = "Ngày mở: " + (letter?.unlockDate || '---');
+    document.getElementById('modal-date').innerText = "Ngày hẹn mở: " + (letter?.unlockDate || '---');
     const msgElement = document.getElementById('modal-message');
-    msgElement.innerText = thư?.message || '';
+    msgElement.innerText = letter?.message || '';
     resetLetterReplyComposer();
     document.getElementById('letter-modal').style.display = 'flex';
 }
 
 // Hàm đóng Modal
-hàm closeLetter() {
+function closeLetter() {
     document.getElementById('letter-modal').style.display = 'none';
     resetLetterReplyComposer();
 }
     
 // Đóng khi nhấn ra ngoài vùng thư
-cửa sổ.onclick = hàm(sự kiện) {
+window.onclick = function(event) {
     const modal = document.getElementById('letter-modal');
     const profileModal = document.getElementById('profile-modal');
     if (event.target == modal) closeLetter();
@@ -2685,7 +2685,7 @@ window.addEventListener('click', function(e) {
     const panel = document.getElementById('playlist-panel');
 
     // Nếu click ra ngoài vùng music-container
-    nếu (container && !container.contains(e.target)) {
+    if (container && !container.contains(e.target)) {
         btn.classList.remove('active');
         options.classList.remove('show');
         if (panel) panel.style.display = 'none';
@@ -2729,7 +2729,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
     setupMobileChatKeyboardBehavior();
 
-    nếu ('Thông báo' trong cửa sổ và quyền Thông báo === 'mặc định') {
+    if ('Notification' in window && Notification.permission === 'default') {
         Notification.requestPermission().catch(() => {});
     }
 
@@ -2737,12 +2737,12 @@ window.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('offline', updateMyPresence);
     document.addEventListener('visibilitychange', () => {
         const hasSession = !!getCurrentUser();
-        nếu (!hasSession) trả về;
+        if (!hasSession) return;
 
-        nếu (document.visibilityState === 'visible') {
+        if (document.visibilityState === 'visible') {
             startPresenceTracking();
             updateMyPresence();
-            trở lại;
+            return;
         }
 
         stopPresenceTracking();
@@ -2755,10 +2755,10 @@ window.addEventListener('DOMContentLoaded', () => {
     });
     
     const user = getCurrentUser();
-    nếu (người dùng) {
+    if (user) {
         enterMainSite();
-    } khác {
-        switchAuthTab('đăng nhập');
+    } else {
+        switchAuthTab('login');
     }
     updateCurrentUserDisplay();
 });
