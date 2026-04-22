@@ -22,6 +22,12 @@ const UNLOCK_NOTIFY_KEY = 'class_capsule_notified_unlocks';
 const CHAT_READ_KEY = 'class_chat_read_state';
 const GROUP_CHAT_READ_KEY = 'class_group_chat_last_read';
 const THEME_MODE_KEY = 'class_theme_mode';
+const INTRO_SETTINGS_DOC = 'intro';
+const DEFAULT_INTRO_SETTINGS = {
+    introTitle: 'Chào mừng đến với trang kỷ niệm lớp',
+    introDescription: 'Nơi lưu giữ hình ảnh, video và những mảnh ghép đẹp nhất của tập thể chúng mình.',
+    introVideoUrl: ''
+};
 
 let unlockWatcherInitialized = false;
 let notifiedUnlockIds = new Set(JSON.parse(localStorage.getItem(UNLOCK_NOTIFY_KEY) || '[]'));
@@ -1885,6 +1891,91 @@ function enterMainSite() {
     initAutoPushEnableOnFirstGesture();
 }
 
+async function fetchIntroSettings() {
+    try {
+        const snap = await db.collection('siteSettings').doc(INTRO_SETTINGS_DOC).get();
+        const data = snap.exists ? snap.data() || {} : {};
+        return {
+            introTitle: String(data.introTitle || DEFAULT_INTRO_SETTINGS.introTitle),
+            introDescription: String(data.introDescription || DEFAULT_INTRO_SETTINGS.introDescription),
+            introVideoUrl: String(data.introVideoUrl || '')
+        };
+    } catch (error) {
+        console.warn('Không tải được intro settings, dùng mặc định:', error);
+        return { ...DEFAULT_INTRO_SETTINGS };
+    }
+}
+
+async function startIntroExperienceAfterLogin() {
+    const settings = await fetchIntroSettings();
+    const passwordScreen = document.getElementById('password-screen');
+    const mainContent = document.getElementById('main-content');
+    const musicContainer = document.getElementById('music-container');
+    const introOverlay = document.getElementById('intro-overlay');
+    const introCard = introOverlay?.querySelector('[data-step="intro"]');
+    const videoCard = introOverlay?.querySelector('[data-step="video"]');
+    const titleEl = document.getElementById('intro-title');
+    const descEl = document.getElementById('intro-description');
+    const videoEl = document.getElementById('intro-video-player');
+    const emptyNoteEl = document.getElementById('intro-video-empty-note');
+
+    if (!introOverlay || !introCard || !videoCard || !titleEl || !descEl || !videoEl || !emptyNoteEl) {
+        enterMainSite();
+        return;
+    }
+
+    if (passwordScreen) passwordScreen.style.display = 'none';
+    if (mainContent) mainContent.style.display = 'none';
+    if (musicContainer) musicContainer.style.display = 'none';
+
+    titleEl.textContent = settings.introTitle;
+    descEl.textContent = settings.introDescription;
+    introCard.style.display = 'block';
+    videoCard.style.display = 'none';
+    introOverlay.style.display = 'flex';
+
+    if (settings.introVideoUrl) {
+        videoEl.src = settings.introVideoUrl;
+        videoEl.style.display = 'block';
+        emptyNoteEl.style.display = 'none';
+    } else {
+        videoEl.removeAttribute('src');
+        videoEl.load();
+        videoEl.style.display = 'none';
+        emptyNoteEl.style.display = 'block';
+    }
+
+    document.body.style.overflow = 'hidden';
+    window.__introSettings = settings;
+}
+
+function goToIntroVideoStep() {
+    const introOverlay = document.getElementById('intro-overlay');
+    const introCard = introOverlay?.querySelector('[data-step="intro"]');
+    const videoCard = introOverlay?.querySelector('[data-step="video"]');
+    const videoEl = document.getElementById('intro-video-player');
+    if (!introOverlay || !introCard || !videoCard) return;
+
+    introCard.style.display = 'none';
+    videoCard.style.display = 'block';
+
+    if (videoEl?.src) {
+        videoEl.currentTime = 0;
+        videoEl.play().catch(() => {});
+    }
+}
+
+function finishIntroExperience() {
+    const introOverlay = document.getElementById('intro-overlay');
+    const videoEl = document.getElementById('intro-video-player');
+    if (videoEl) {
+        videoEl.pause();
+    }
+    if (introOverlay) introOverlay.style.display = 'none';
+    document.body.style.overflow = '';
+    enterMainSite();
+}
+
 async function logoutUser() {
     await updateMyPresence().catch(() => {});
     stopPresenceTracking();
@@ -2376,7 +2467,7 @@ async function checkPassword() {
         localStorage.setItem(SESSION_KEY, JSON.stringify(sessionUser));
         localStorage.setItem('class_user_name', account.name);
         showAuthMessage('Đăng nhập thành công!', false);
-        enterMainSite();
+        startIntroExperienceAfterLogin();
     } catch (error) {
         console.error('Lỗi đăng nhập Firebase:', error);
         showAuthMessage('Không đăng nhập được do lỗi kết nối Firebase.');
@@ -3074,5 +3165,4 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 window.toggleDarkMode = toggleDarkMode;
-
 
