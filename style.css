@@ -300,6 +300,71 @@ body {
     color: #333;
 }
 
+.intro-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 12000;
+    background: radial-gradient(circle at top, rgba(255,255,255,0.35), rgba(17,24,39,0.9));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 18px;
+}
+
+.intro-card {
+    width: min(760px, 95vw);
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 22px;
+    padding: 26px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    text-align: center;
+}
+
+.intro-badge {
+    display: inline-block;
+    margin: 0 0 8px;
+    border-radius: 999px;
+    padding: 5px 12px;
+    background: #ffefe9;
+    color: #d9480f;
+    font-weight: 700;
+}
+
+.intro-card h2 {
+    margin: 8px 0 14px;
+    font-size: clamp(1.5rem, 4vw, 2.1rem);
+    color: #111827;
+}
+
+.intro-card p {
+    color: #374151;
+}
+
+.intro-next-btn {
+    margin-top: 16px;
+    border: none;
+    border-radius: 999px;
+    background: linear-gradient(135deg, #ff7e5f, #feb47b);
+    color: #fff;
+    font-weight: 700;
+    cursor: pointer;
+    padding: 11px 24px;
+}
+
+#intro-video-player {
+    width: 100%;
+    border-radius: 16px;
+    margin-top: 10px;
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    background: #000;
+    max-height: 58vh;
+}
+
+.intro-video-empty-note {
+    font-style: italic;
+    opacity: 0.82;
+}
+
 @keyframes gradientBG {
     0% { background-position: 0% 50%; }
     50% { background-position: 100% 50%; }
