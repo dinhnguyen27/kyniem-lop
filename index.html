@@ -279,6 +279,22 @@
         </div>
     </div>
 
+    <div id="intro-overlay" class="intro-overlay" style="display:none;">
+        <div class="intro-card" data-step="intro">
+            <p class="intro-badge">✨ Mở đầu</p>
+            <h2 id="intro-title">Chào mừng đến với trang kỷ niệm lớp</h2>
+            <p id="intro-description">Nơi lưu giữ hình ảnh, video và những mảnh ghép đẹp nhất của tập thể chúng mình.</p>
+            <button type="button" class="intro-next-btn" onclick="goToIntroVideoStep()">Tiếp theo</button>
+        </div>
+        <div class="intro-card" data-step="video" style="display:none;">
+            <p class="intro-badge">🎬 Video kỷ niệm</p>
+            <h2>Khoảnh khắc dành cho cả lớp</h2>
+            <video id="intro-video-player" controls playsinline preload="metadata"></video>
+            <p id="intro-video-empty-note" class="intro-video-empty-note" style="display:none;">Chưa có video mở đầu. Bạn có thể cấu hình trong trang admin.</p>
+            <button type="button" class="intro-next-btn" onclick="finishIntroExperience()">Vào trang chính</button>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
