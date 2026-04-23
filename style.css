@@ -360,6 +360,15 @@ body {
     max-height: 58vh;
 }
 
+#intro-drive-player {
+    width: 100%;
+    margin-top: 10px;
+    border-radius: 16px;
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    min-height: min(58vh, 420px);
+    background: #000;
+}
+
 .intro-video-empty-note {
     font-style: italic;
     opacity: 0.82;
