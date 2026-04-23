@@ -24,6 +24,7 @@ const GROUP_CHAT_READ_KEY = 'class_group_chat_last_read';
 const THEME_MODE_KEY = 'class_theme_mode';
 const INTRO_SETTINGS_DOC = 'intro';
 const DEFAULT_INTRO_SETTINGS = {
+    introEnabled: true,
     introTitle: 'Chào mừng đến với trang kỷ niệm lớp',
     introDescription: 'Nơi lưu giữ hình ảnh, video và những mảnh ghép đẹp nhất của tập thể chúng mình.',
     introVideoUrl: ''
@@ -1896,6 +1897,7 @@ async function fetchIntroSettings() {
         const snap = await db.collection('siteSettings').doc(INTRO_SETTINGS_DOC).get();
         const data = snap.exists ? snap.data() || {} : {};
         return {
+            introEnabled: data.introEnabled !== false,
             introTitle: String(data.introTitle || DEFAULT_INTRO_SETTINGS.introTitle),
             introDescription: String(data.introDescription || DEFAULT_INTRO_SETTINGS.introDescription),
             introVideoUrl: String(data.introVideoUrl || '')
@@ -1906,8 +1908,23 @@ async function fetchIntroSettings() {
     }
 }
 
+function normalizeIntroVideoUrl(rawUrl = '') {
+    const url = String(rawUrl || '').trim();
+    if (!url) return '';
+    const driveMatch = url.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/i)
+        || url.match(/[?&]id=([a-zA-Z0-9_-]+)/i);
+    if (driveMatch?.[1]) {
+        return `https://drive.google.com/uc?export=download&id=${driveMatch[1]}`;
+    }
+    return url;
+}
+
 async function startIntroExperienceAfterLogin() {
     const settings = await fetchIntroSettings();
+    if (settings.introEnabled === false) {
+        enterMainSite();
+        return;
+    }
     const passwordScreen = document.getElementById('password-screen');
     const mainContent = document.getElementById('main-content');
     const musicContainer = document.getElementById('music-container');
@@ -1934,8 +1951,11 @@ async function startIntroExperienceAfterLogin() {
     videoCard.style.display = 'none';
     introOverlay.style.display = 'flex';
 
-    if (settings.introVideoUrl) {
-        videoEl.src = settings.introVideoUrl;
+    const normalizedVideoUrl = normalizeIntroVideoUrl(settings.introVideoUrl);
+    if (normalizedVideoUrl) {
+        videoEl.preload = 'auto';
+        videoEl.src = normalizedVideoUrl;
+        videoEl.load();
         videoEl.style.display = 'block';
         emptyNoteEl.style.display = 'none';
     } else {
