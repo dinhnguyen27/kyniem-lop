@@ -247,6 +247,7 @@
                 <input type="tel" id="profile-phone" placeholder="Số điện thoại" />
                 <input type="email" id="profile-email" placeholder="Email" readonly />
                 <button onclick="saveProfile()">Lưu thay đổi</button>
+                <button type="button" class="profile-refresh-btn" onclick="refreshWebApp()">🔄 Làm mới web/app</button>
             </div>
         </div>
     </div>
@@ -285,7 +286,7 @@
         <div class="intro-card" data-step="intro">
             <p class="intro-badge">✨ Mở đầu</p>
             <h2 id="intro-title">Chào mừng đến với trang kỷ niệm lớp</h2>
-            <p id="intro-description">Nơi lưu giữ hình ảnh, video và những mảnh ghép đẹp nhất của tập thể chúng mình.</p>
+            <p id="intro-description" class="intro-description-text">Nơi lưu giữ hình ảnh, video và những mảnh ghép đẹp nhất của tập thể chúng mình.</p>
             <button type="button" class="intro-next-btn" onclick="goToIntroVideoStep()">Tiếp theo</button>
         </div>
         <div class="intro-card" data-step="video" style="display:none;">
@@ -294,7 +295,10 @@
             <video id="intro-video-player" controls playsinline preload="metadata"></video>
             <iframe id="intro-drive-player" title="Video kỷ niệm từ Google Drive" allow="autoplay; fullscreen" allowfullscreen style="display:none;"></iframe>
             <p id="intro-video-empty-note" class="intro-video-empty-note" style="display:none;">Chưa có video mở đầu. Bạn có thể cấu hình trong trang admin.</p>
-            <button type="button" class="intro-next-btn" onclick="finishIntroExperience()">Vào trang chính</button>
+            <div class="intro-action-row">
+                <button type="button" class="intro-next-btn intro-fullscreen-btn" onclick="openIntroMediaFullscreen()">⛶ Toàn màn hình</button>
+                <button type="button" class="intro-next-btn" onclick="finishIntroExperience()">Vào trang chính</button>
+            </div>
         </div>
     </div>
 
