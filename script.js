@@ -2014,6 +2014,35 @@ function goToIntroVideoStep() {
     }
 }
 
+async function openIntroMediaFullscreen() {
+    const videoEl = document.getElementById('intro-video-player');
+    const driveEl = document.getElementById('intro-drive-player');
+    const showingVideo = videoEl && videoEl.style.display !== 'none' && videoEl.src;
+    const target = showingVideo ? videoEl : (driveEl && driveEl.style.display !== 'none' ? driveEl : null);
+
+    if (!target) return alert('Chưa có video để mở toàn màn hình.');
+
+    try {
+        if (showingVideo && typeof videoEl.webkitEnterFullscreen === 'function') {
+            videoEl.webkitEnterFullscreen();
+            return;
+        }
+
+        const requestFs = target.requestFullscreen
+            || target.webkitRequestFullscreen
+            || target.msRequestFullscreen;
+        if (typeof requestFs === 'function') {
+            await requestFs.call(target);
+            return;
+        }
+
+        alert('Thiết bị này chưa hỗ trợ toàn màn hình cho video ở trình duyệt hiện tại.');
+    } catch (error) {
+        console.warn('Không thể mở fullscreen cho intro media:', error);
+        alert('Không mở được toàn màn hình. Bạn thử bấm biểu tượng fullscreen trên player nhé.');
+    }
+}
+
 function finishIntroExperience() {
     const introOverlay = document.getElementById('intro-overlay');
     const videoEl = document.getElementById('intro-video-player');
@@ -2713,7 +2742,28 @@ function closeProfileModal() {
     if (modal) modal.style.display = 'none';
 }
 
-    async function saveProfile() {
+async function refreshWebApp() {
+    try {
+        if ('serviceWorker' in navigator) {
+            const regs = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(regs.map((reg) => reg.update().catch(() => {})));
+        }
+
+        if ('caches' in window) {
+            const keys = await caches.keys();
+            await Promise.all(keys.map((key) => caches.delete(key)));
+        }
+
+        const nextUrl = new URL(window.location.href);
+        nextUrl.searchParams.set('refresh', Date.now().toString());
+        window.location.replace(nextUrl.toString());
+    } catch (error) {
+        console.warn('Làm mới app thất bại, fallback reload:', error);
+        window.location.reload();
+    }
+}
+
+async function saveProfile() {
     const user = normalizeUserAvatar(getCurrentUser());
     if (!user) return;
 
