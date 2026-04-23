@@ -1908,15 +1908,27 @@ async function fetchIntroSettings() {
     }
 }
 
-function normalizeIntroVideoUrl(rawUrl = '') {
+function extractGoogleDriveFileId(rawUrl = '') {
     const url = String(rawUrl || '').trim();
     if (!url) return '';
     const driveMatch = url.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/i)
         || url.match(/[?&]id=([a-zA-Z0-9_-]+)/i);
-    if (driveMatch?.[1]) {
-        return `https://drive.google.com/uc?export=download&id=${driveMatch[1]}`;
+    return driveMatch?.[1] || '';
+}
+
+function resolveIntroMedia(rawUrl = '') {
+    const url = String(rawUrl || '').trim();
+    if (!url) return { kind: 'none', url: '' };
+
+    const driveId = extractGoogleDriveFileId(url);
+    if (driveId) {
+        return {
+            kind: 'drive',
+            url: `https://drive.google.com/file/d/${driveId}/preview`
+        };
     }
-    return url;
+
+    return { kind: 'video', url };
 }
 
 async function startIntroExperienceAfterLogin() {
@@ -1934,9 +1946,10 @@ async function startIntroExperienceAfterLogin() {
     const titleEl = document.getElementById('intro-title');
     const descEl = document.getElementById('intro-description');
     const videoEl = document.getElementById('intro-video-player');
+    const driveEl = document.getElementById('intro-drive-player');
     const emptyNoteEl = document.getElementById('intro-video-empty-note');
 
-    if (!introOverlay || !introCard || !videoCard || !titleEl || !descEl || !videoEl || !emptyNoteEl) {
+    if (!introOverlay || !introCard || !videoCard || !titleEl || !descEl || !videoEl || !driveEl || !emptyNoteEl) {
         enterMainSite();
         return;
     }
@@ -1951,14 +1964,26 @@ async function startIntroExperienceAfterLogin() {
     videoCard.style.display = 'none';
     introOverlay.style.display = 'flex';
 
-    const normalizedVideoUrl = normalizeIntroVideoUrl(settings.introVideoUrl);
-    if (normalizedVideoUrl) {
+    const media = resolveIntroMedia(settings.introVideoUrl);
+    if (media.kind === 'video') {
         videoEl.preload = 'auto';
-        videoEl.src = normalizedVideoUrl;
+        videoEl.src = media.url;
         videoEl.load();
         videoEl.style.display = 'block';
+        driveEl.src = '';
+        driveEl.style.display = 'none';
+        emptyNoteEl.style.display = 'none';
+    } else if (media.kind === 'drive') {
+        videoEl.pause();
+        videoEl.removeAttribute('src');
+        videoEl.load();
+        videoEl.style.display = 'none';
+        driveEl.src = media.url;
+        driveEl.style.display = 'block';
         emptyNoteEl.style.display = 'none';
     } else {
+        driveEl.src = '';
+        driveEl.style.display = 'none';
         videoEl.removeAttribute('src');
         videoEl.load();
         videoEl.style.display = 'none';
@@ -1974,22 +1999,30 @@ function goToIntroVideoStep() {
     const introCard = introOverlay?.querySelector('[data-step="intro"]');
     const videoCard = introOverlay?.querySelector('[data-step="video"]');
     const videoEl = document.getElementById('intro-video-player');
+    const driveEl = document.getElementById('intro-drive-player');
     if (!introOverlay || !introCard || !videoCard) return;
 
     introCard.style.display = 'none';
     videoCard.style.display = 'block';
 
-    if (videoEl?.src) {
+    if (videoEl?.src && videoEl.style.display !== 'none') {
         videoEl.currentTime = 0;
         videoEl.play().catch(() => {});
+    }
+    if (driveEl && driveEl.style.display !== 'none') {
+        driveEl.focus();
     }
 }
 
 function finishIntroExperience() {
     const introOverlay = document.getElementById('intro-overlay');
     const videoEl = document.getElementById('intro-video-player');
+    const driveEl = document.getElementById('intro-drive-player');
     if (videoEl) {
         videoEl.pause();
+    }
+    if (driveEl) {
+        driveEl.src = '';
     }
     if (introOverlay) introOverlay.style.display = 'none';
     document.body.style.overflow = '';
