@@ -23,7 +23,7 @@
     .topbar h1{margin:0;font-size:1.35rem}
     .topbar p{margin:4px 0 0;color:var(--muted)}
     .inline{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-    .stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:14px 0 18px}
+    .stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:14px 0 18px}
     .stat{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:10px 12px;box-shadow:var(--shadow)}
     .stat span{display:block;color:var(--muted);font-size:.8rem}
     .panel{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:14px;overflow:hidden}
@@ -67,6 +67,9 @@
     .coord-bulk-box{border:1px dashed var(--border);border-radius:12px;padding:10px;margin-bottom:10px;background:var(--card)}
     .bulk-meta-box{margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)}
     #picker-map{width:100%;height:320px;border:1px solid var(--border);border-radius:12px;margin-top:8px}
+    .intro-setting-box{border:1px dashed var(--border);border-radius:12px;padding:12px;background:var(--card)}
+    .intro-video-preview{width:min(360px,100%);max-height:220px;border-radius:10px;background:#000;border:1px solid var(--border)}
+    .intro-drive-preview{width:min(520px,100%);height:300px;border-radius:10px;background:#000;border:1px solid var(--border)}
 
     @media (max-width: 980px){.stats,.grid-4,.grid-3,.grid-2{grid-template-columns:1fr}.library-layout{grid-template-columns:1fr}.detail-top{grid-template-columns:1fr}.detail-img{height:180px}}
   </style>
@@ -87,6 +90,33 @@
       <div class="stat"><b id="stat-posts">0</b><span>Bài đăng</span></div>
       <div class="stat"><b id="stat-messages">0</b><span>Lời nhắn tương lai</span></div>
       <div class="stat"><b id="stat-map-ready">0</b><span>Ảnh đủ dữ liệu map</span></div>
+      <div class="stat"><b id="stat-intro">OFF</b><span>Intro mở đầu</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>🎬 Mở đầu sau khi đăng nhập</h2></div>
+      <div class="panel-body">
+        <div class="intro-setting-box">
+          <div class="grid-2">
+            <input id="intro-title-input" type="text" placeholder="Tiêu đề mở đầu">
+            <input id="intro-video-url-input" type="text" placeholder="Link video mở đầu (tự điền khi chọn bên dưới)">
+          </div>
+          <label class="hint" style="display:flex;align-items:center;gap:8px;margin:8px 0 2px;">
+            <input id="intro-enabled-input" type="checkbox" checked>
+            Bật intro sau khi đăng nhập
+          </label>
+          <textarea id="intro-description-input" placeholder="Nội dung giới thiệu ngắn về website..."></textarea>
+          <div class="inline">
+            <select id="intro-video-select" onchange="onIntroVideoSelectChanged()">
+              <option value="">-- Chọn video có sẵn từ thư viện --</option>
+            </select>
+            <button class="btn-success" style="width:auto;" onclick="saveIntroSettings()">Lưu phần mở đầu</button>
+          </div>
+          <p class="hint">Mẹo: Có thể dán link Google Drive dạng share. Hệ thống sẽ tự phát bằng Drive preview để tránh lỗi phát video trực tiếp.</p>
+          <video id="intro-video-preview" class="intro-video-preview" controls playsinline></video>
+          <iframe id="intro-drive-preview" class="intro-drive-preview" title="Drive preview intro" allow="autoplay; fullscreen" allowfullscreen style="display:none;"></iframe>
+        </div>
+      </div>
     </section>
 
     <section class="panel">
@@ -208,6 +238,14 @@
     const db = firebase.firestore();
 
     const MESSAGES_ADMIN_PASSWORD = 'admin123';
+    const INTRO_SETTINGS_DOC = 'intro';
+    const DEFAULT_INTRO_SETTINGS = {
+      introEnabled: true,
+      introTitle: 'Chào mừng đến với trang kỷ niệm lớp',
+      introDescription: 'Nơi lưu giữ hình ảnh, video và những mảnh ghép đẹp nhất của tập thể chúng mình.',
+      introVideoUrl: ''
+    };
+    let introSettingsCache = { ...DEFAULT_INTRO_SETTINGS };
     let isMessagesUnlocked = false;
     let postsCache = [];
     let selectedPostId = null;
@@ -244,6 +282,138 @@
       document.getElementById('stat-posts').textContent=String(posts.length);
       document.getElementById('stat-messages').textContent=String(messages.length);
       document.getElementById('stat-map-ready').textContent=String(mapReady);
+      document.getElementById('stat-intro').textContent = introSettingsCache.introEnabled ? 'ON' : 'OFF';
+    }
+
+    function extractGoogleDriveFileId(rawUrl = ''){
+      const url = String(rawUrl || '').trim();
+      if(!url) return '';
+      const driveMatch = url.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/i)
+        || url.match(/[?&]id=([a-zA-Z0-9_-]+)/i);
+      return driveMatch?.[1] || '';
+    }
+
+    function normalizeIntroVideoUrl(rawUrl = ''){
+      const url = String(rawUrl || '').trim();
+      const driveId = extractGoogleDriveFileId(url);
+      if(driveId) return `https://drive.google.com/file/d/${driveId}/view?usp=sharing`;
+      return url;
+    }
+
+    function resolveIntroMedia(rawUrl = ''){
+      const url = String(rawUrl || '').trim();
+      if(!url) return { kind: 'none', url: '' };
+      const driveId = extractGoogleDriveFileId(url);
+      if(driveId) return { kind: 'drive', url: `https://drive.google.com/file/d/${driveId}/preview` };
+      return { kind: 'video', url };
+    }
+
+    function extractVideoItemsFromPosts(items = []) {
+      return items
+        .filter((item) => {
+          const url = String(item?.data?.url || '').toLowerCase();
+          return url.includes('.mp4') || url.includes('.webm') || url.includes('.mov') || url.includes('/video/upload');
+        })
+        .map((item) => ({ id: item.id, url: String(item.data.url || ''), caption: item.data.caption || '(Không tiêu đề)' }));
+    }
+
+    function renderIntroVideoOptions(items = []) {
+      const select = document.getElementById('intro-video-select');
+      if (!select) return;
+      const selectedUrl = document.getElementById('intro-video-url-input')?.value || '';
+      const videoItems = extractVideoItemsFromPosts(items);
+      select.innerHTML = '<option value="">-- Chọn video có sẵn từ thư viện --</option>' + videoItems.map((item) => {
+        const safeCaption = String(item.caption).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const selected = selectedUrl && selectedUrl === item.url ? 'selected' : '';
+        return `<option value="${item.url}" ${selected}>${safeCaption}</option>`;
+      }).join('');
+    }
+
+    async function loadIntroSettings() {
+      try {
+        const snap = await db.collection('siteSettings').doc(INTRO_SETTINGS_DOC).get();
+        const settings = snap.exists ? snap.data() || {} : {};
+        introSettingsCache = {
+          introEnabled: settings.introEnabled !== false,
+          introTitle: String(settings.introTitle || DEFAULT_INTRO_SETTINGS.introTitle),
+          introDescription: String(settings.introDescription || DEFAULT_INTRO_SETTINGS.introDescription),
+          introVideoUrl: String(settings.introVideoUrl || DEFAULT_INTRO_SETTINGS.introVideoUrl)
+        };
+        document.getElementById('intro-title-input').value = String(settings.introTitle || DEFAULT_INTRO_SETTINGS.introTitle);
+        document.getElementById('intro-description-input').value = String(settings.introDescription || DEFAULT_INTRO_SETTINGS.introDescription);
+        document.getElementById('intro-video-url-input').value = String(settings.introVideoUrl || DEFAULT_INTRO_SETTINGS.introVideoUrl);
+        document.getElementById('intro-enabled-input').checked = settings.introEnabled !== false;
+        updateIntroVideoPreview();
+        updateStats(window.__adminPosts||[], window.__adminMessages||[]);
+      } catch (error) {
+        alert('Không tải được phần mở đầu: ' + error.message);
+      }
+    }
+
+    function onIntroVideoSelectChanged() {
+      const select = document.getElementById('intro-video-select');
+      const videoUrlInput = document.getElementById('intro-video-url-input');
+      if (select && videoUrlInput && select.value) videoUrlInput.value = select.value;
+      updateIntroVideoPreview();
+    }
+
+    function updateIntroVideoPreview() {
+      const preview = document.getElementById('intro-video-preview');
+      const drivePreview = document.getElementById('intro-drive-preview');
+      const media = resolveIntroMedia(document.getElementById('intro-video-url-input')?.value || '');
+      if (!preview || !drivePreview) return;
+
+      if (media.kind === 'none') {
+        preview.pause();
+        preview.removeAttribute('src');
+        preview.style.display = 'none';
+        preview.load();
+        drivePreview.src = '';
+        drivePreview.style.display = 'none';
+        return;
+      }
+
+      if (media.kind === 'drive') {
+        preview.pause();
+        preview.removeAttribute('src');
+        preview.style.display = 'none';
+        preview.load();
+        drivePreview.src = media.url;
+        drivePreview.style.display = 'block';
+        return;
+      }
+
+      drivePreview.src = '';
+      drivePreview.style.display = 'none';
+      preview.style.display = 'block';
+      preview.src = media.url;
+    }
+
+    async function saveIntroSettings() {
+      const introTitle = String(document.getElementById('intro-title-input').value || '').trim();
+      const introDescription = String(document.getElementById('intro-description-input').value || '').trim();
+      const introVideoUrl = normalizeIntroVideoUrl(document.getElementById('intro-video-url-input').value || '');
+      const introEnabled = !!document.getElementById('intro-enabled-input')?.checked;
+      if (!introTitle || !introDescription) {
+        alert('Vui lòng nhập đầy đủ tiêu đề và nội dung giới thiệu.');
+        return;
+      }
+
+      try {
+        await db.collection('siteSettings').doc(INTRO_SETTINGS_DOC).set({
+          introEnabled,
+          introTitle,
+          introDescription,
+          introVideoUrl,
+          updatedAt: Date.now()
+        }, { merge: true });
+        introSettingsCache = { introEnabled, introTitle, introDescription, introVideoUrl };
+        updateStats(window.__adminPosts||[], window.__adminMessages||[]);
+        alert('Đã lưu phần mở đầu thành công!');
+        updateIntroVideoPreview();
+      } catch (error) {
+        alert('Lưu phần mở đầu thất bại: ' + error.message);
+      }
     }
 
     function renderPostList(){
@@ -350,7 +520,7 @@
         selectedPostIds = new Set(Array.from(selectedPostIds).filter((id) => validIds.has(id)));
         if(!selectedPostId && items.length) selectedPostId=items[0].id;
         if(selectedPostId && !items.some(i=>i.id===selectedPostId)) selectedPostId=items[0]?.id || null;
-        renderPostList(); renderPostDetail(); updateStats(window.__adminPosts, window.__adminMessages||[]);
+        renderPostList(); renderPostDetail(); renderIntroVideoOptions(items); updateStats(window.__adminPosts, window.__adminMessages||[]);
       });
     }
 
@@ -581,6 +751,8 @@
     }
 
     const savedTheme=localStorage.getItem('admin_theme_mode')||'light'; applyTheme(savedTheme);
+    document.getElementById('intro-video-url-input')?.addEventListener('input', updateIntroVideoPreview);
+    loadIntroSettings();
     loadManagement();
   </script>
 </body>
