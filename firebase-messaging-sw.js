@@ -187,12 +187,9 @@ self.addEventListener('message', (event) => {
     }
 });
 
-messaging.setBackgroundMessageHandler((payload) => {
-    return displayNotificationFromPayload(payload);
-});
-
 self.addEventListener('push', (event) => {
     const payload = safeParsePushData(event);
+    if (!payload || (!payload.data && !payload.notification)) return;
     event.waitUntil(displayNotificationFromPayload(payload));
 });
 
