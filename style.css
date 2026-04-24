@@ -1,3 +1,61 @@
+/* ===== Design tokens (Phase 1 refactor) ===== */
+:root {
+    --bg: #f8fafc;
+    --bg-gradient: linear-gradient(-45deg, #ff9a9e, #fad0c4, #a1c4fd, #c2e9fb);
+    --surface: #ffffff;
+    --surface-soft: #fff7f3;
+    --surface-glass: rgba(255, 255, 255, 0.7);
+    --surface-overlay: rgba(0,0,0,0.55);
+    --text-primary: #111827;
+    --text-secondary: #374151;
+    --text-muted: #6b7280;
+    --border-soft: #e5e7eb;
+
+    --brand-primary: #ff7e5f;
+    --brand-secondary: #feb47b;
+    --text-on-brand: #ffffff;
+    --accent: var(--brand-primary);
+    --danger: #ef4444;
+
+    --intro-overlay-light: radial-gradient(circle at top, rgba(255,255,255,0.18), rgba(17,24,39,0.72));
+    --intro-overlay-dark: radial-gradient(circle at top, rgba(30, 41, 59, 0.28), rgba(2, 6, 23, 0.82));
+    --intro-card-bg: var(--surface-glass);
+    --intro-card-border: rgba(255,255,255,0.45);
+    --intro-card-shadow: 0 28px 80px rgba(3, 10, 22, 0.34);
+    --intro-title: #111827;
+    --intro-text: #374151;
+    --intro-badge-bg: #ffefe9;
+    --intro-badge-text: #d9480f;
+    --intro-btn-bg: linear-gradient(135deg, var(--brand-primary), var(--brand-secondary));
+    --intro-btn-text: #ffffff;
+    --intro-media-border: rgba(15, 23, 42, 0.12);
+}
+
+body.dark-mode {
+    --bg: #090f1a;
+    --bg-gradient: linear-gradient(-45deg, #0f172a, #111827, #1e293b, #0b1220);
+    --surface: #111827;
+    --surface-soft: #1f2937;
+    --surface-glass: rgba(15, 23, 42, 0.72);
+    --surface-overlay: rgba(2, 6, 23, 0.72);
+    --text-primary: #f8fafc;
+    --text-secondary: #dbeafe;
+    --text-muted: #94a3b8;
+    --border-soft: rgba(148, 163, 184, 0.35);
+
+    --intro-overlay-light: var(--intro-overlay-dark);
+    --intro-card-bg: var(--surface-glass);
+    --intro-card-border: var(--border-soft);
+    --intro-card-shadow: 0 28px 90px rgba(2, 6, 23, 0.65);
+    --intro-title: #f8fafc;
+    --intro-text: #dbeafe;
+    --intro-badge-bg: rgba(59, 130, 246, 0.2);
+    --intro-badge-text: #bfdbfe;
+    --intro-btn-bg: linear-gradient(135deg, #0ea5e9, #2563eb);
+    --intro-btn-text: #f8fafc;
+    --intro-media-border: rgba(148, 163, 184, 0.45);
+}
+
 /* Giao diện màn hình khóa */
 #password-screen {
     position: fixed;
@@ -34,8 +92,8 @@
     padding: 12px 30px;
     border-radius: 25px;
     border: none;
-    background: #ff7e5f;
-    color: white;
+    background: var(--brand-primary);
+    color: var(--text-on-brand);
     font-weight: bold;
     cursor: pointer;
     margin-left: 10px;
@@ -43,7 +101,7 @@
 }
 
 .lock-box button:hover {
-    background: #feb47b;
+    background: var(--brand-secondary);
     transform: scale(1.05);
 }
 
@@ -68,7 +126,7 @@
 }
 
 .auth-tab.active {
-    background: #ff7e5f;
+    background: var(--brand-primary);
 }
 
 .auth-panel {
@@ -147,7 +205,7 @@
     bottom: 18px;
     border: none;
     border-radius: 30px;
-    background: #ff7e5f;
+    background: var(--brand-primary);
     color: #fff;
     font-weight: 700;
     padding: 10px 16px;
@@ -161,7 +219,7 @@
     bottom: 64px;
     width: min(360px, 92vw);
     height: 500px;
-    background: #fff;
+    background: var(--surface);
     border-radius: 14px;
     box-shadow: 0 12px 30px rgba(0,0,0,.25);
     display: none;
@@ -183,8 +241,8 @@
     justify-content: space-between;
     align-items: center;
     padding: 10px 12px;
-    background: #ffefe9;
-    border-bottom: 1px solid #f2d6cc;
+    background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+    border-bottom: 1px solid var(--border-soft);
 }
 
 .chat-panel-header button {
@@ -197,7 +255,7 @@
 .chat-users {
     max-height: 150px;
     overflow-y: auto;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid var(--border-soft);
 }
 
 .chat-user-item {
@@ -208,7 +266,7 @@
     cursor: pointer;
 }
 
-.chat-user-item:hover { background: #f7f7f7; }
+.chat-user-item:hover { background: color-mix(in srgb, var(--surface) 90%, #000 2%); }
 
 .chat-user-item .dot {
     width: 9px;
@@ -252,16 +310,16 @@
 }
 
 .chat-bubble.other {
-    background: #fff;
-    border: 1px solid #e5e5e5;
+    background: var(--surface);
+    border: 1px solid var(--border-soft);
 }
 
 .chat-input-row {
     display: flex;
     gap: 8px;
     padding: 10px;
-    border-top: 1px solid #eee;
-    background: #fff;
+    border-top: 1px solid var(--border-soft);
+    background: var(--surface);
 }
 
 .chat-input-row input {
@@ -283,7 +341,7 @@
 
 .user-chip button {
     border: none;
-    background: #ff7e5f;
+    background: var(--accent);
     color: #fff;
     border-radius: 20px;
     padding: 6px 12px;
@@ -293,18 +351,18 @@
 body {
     margin: 0;
     font-family: 'Quicksand', sans-serif;
-    background: linear-gradient(-45deg, #ff9a9e, #fad0c4, #a1c4fd, #c2e9fb);
+    background: var(--bg-gradient);
     background-size: 400% 400%;
     animation: gradientBG 15s ease infinite;
     min-height: 100vh;
-    color: #333;
+    color: var(--text-primary);
 }
 
 .intro-overlay {
     position: fixed;
     inset: 0;
     z-index: 12000;
-    background: radial-gradient(circle at top, rgba(255,255,255,0.18), rgba(17,24,39,0.72));
+    background: var(--intro-overlay-light);
     backdrop-filter: blur(16px) saturate(120%);
     -webkit-backdrop-filter: blur(16px) saturate(120%);
     display: flex;
@@ -315,24 +373,24 @@ body {
 
 .intro-card {
     width: min(980px, 96vw);
-    background: rgba(255, 255, 255, 0.7);
+    background: var(--intro-card-bg);
     backdrop-filter: blur(14px) saturate(118%);
     -webkit-backdrop-filter: blur(14px) saturate(118%);
-    border: 1px solid rgba(255,255,255,0.45);
+    border: 1px solid var(--intro-card-border);
     border-radius: 28px;
     padding: clamp(24px, 4vw, 38px);
-    box-shadow: 0 28px 80px rgba(3, 10, 22, 0.34);
+    box-shadow: var(--intro-card-shadow);
     text-align: center;
 }
 
 body.dark-mode .intro-overlay {
-    background: radial-gradient(circle at top, rgba(30, 41, 59, 0.28), rgba(2, 6, 23, 0.82));
+    background: var(--intro-overlay-light);
 }
 
 body.dark-mode .intro-card {
-    background: rgba(15, 23, 42, 0.72);
-    border-color: rgba(148, 163, 184, 0.35);
-    box-shadow: 0 28px 90px rgba(2, 6, 23, 0.65);
+    background: var(--intro-card-bg);
+    border-color: var(--intro-card-border);
+    box-shadow: var(--intro-card-shadow);
 }
 
 .intro-badge {
@@ -340,33 +398,33 @@ body.dark-mode .intro-card {
     margin: 0 0 8px;
     border-radius: 999px;
     padding: 5px 12px;
-    background: #ffefe9;
-    color: #d9480f;
+    background: var(--intro-badge-bg);
+    color: var(--intro-badge-text);
     font-weight: 700;
 }
 
 body.dark-mode .intro-badge {
-    background: rgba(59, 130, 246, 0.2);
-    color: #bfdbfe;
+    background: var(--intro-badge-bg);
+    color: var(--intro-badge-text);
 }
 
 .intro-card h2 {
     margin: 10px 0 16px;
     font-size: clamp(1.9rem, 4.7vw, 3.1rem);
-    color: #111827;
+    color: var(--intro-title);
 }
 
 body.dark-mode .intro-card h2 {
-    color: #f8fafc;
+    color: var(--intro-title);
 }
 
 .intro-card p {
-    color: #374151;
+    color: var(--intro-text);
 }
 
 body.dark-mode .intro-card p,
 body.dark-mode .intro-description-text {
-    color: #dbeafe;
+    color: var(--intro-text);
 }
 
 .intro-description-text {
@@ -381,23 +439,23 @@ body.dark-mode .intro-description-text {
     margin-top: 16px;
     border: none;
     border-radius: 999px;
-    background: linear-gradient(135deg, #ff7e5f, #feb47b);
-    color: #fff;
+    background: var(--intro-btn-bg);
+    color: var(--intro-btn-text);
     font-weight: 700;
     cursor: pointer;
     padding: 11px 24px;
 }
 
 body.dark-mode .intro-next-btn {
-    background: linear-gradient(135deg, #0ea5e9, #2563eb);
-    color: #f8fafc;
+    background: var(--intro-btn-bg);
+    color: var(--intro-btn-text);
 }
 
 #intro-video-player {
     width: 100%;
     border-radius: 16px;
     margin-top: 12px;
-    border: 1px solid rgba(15, 23, 42, 0.12);
+    border: 1px solid var(--intro-media-border);
     background: #000;
     min-height: min(58vh, 520px);
     max-height: 68vh;
@@ -405,14 +463,14 @@ body.dark-mode .intro-next-btn {
 
 body.dark-mode #intro-video-player,
 body.dark-mode #intro-drive-player {
-    border-color: rgba(148, 163, 184, 0.45);
+    border-color: var(--intro-media-border);
 }
 
 #intro-drive-player {
     width: 100%;
     margin-top: 12px;
     border-radius: 16px;
-    border: 1px solid rgba(15, 23, 42, 0.12);
+    border: 1px solid var(--intro-media-border);
     min-height: min(58vh, 520px);
     max-height: 68vh;
     background: #000;
@@ -1418,7 +1476,7 @@ video[poster] {
     display: none;
     position: fixed;
     inset: 0;
-    background: rgba(0,0,0,0.55);
+    background: var(--surface-overlay);
     z-index: 3000;
     align-items: center;
     justify-content: center;
@@ -1426,7 +1484,8 @@ video[poster] {
 
 .profile-modal-content {
     width: min(460px, 92vw);
-    background: #fff;
+    background: var(--surface);
+    color: var(--text-primary);
     border-radius: 16px;
     padding: 20px;
     position: relative;
@@ -1447,7 +1506,9 @@ video[poster] {
 
 .profile-form input {
     padding: 10px 12px;
-    border: 1px solid #ddd;
+    border: 1px solid var(--border-soft);
+    color: var(--text-primary);
+    background: var(--surface);
     border-radius: 10px;
 }
 
@@ -1468,7 +1529,7 @@ video[poster] {
     border: none;
     padding: 10px 14px;
     border-radius: 10px;
-    background: #ff7e5f;
+    background: var(--accent);
     color: #fff;
     font-weight: 700;
     cursor: pointer;
@@ -1490,7 +1551,7 @@ video[poster] {
 
 .chat-panel {
     grid-template-rows: auto 1fr;
-    background: linear-gradient(180deg, #fff 0%, #fff7f3 100%);
+    background: linear-gradient(180deg, var(--surface) 0%, var(--surface-soft) 100%);
 }
 
 .chat-users-view,
@@ -1508,7 +1569,7 @@ video[poster] {
     grid-template-rows: auto 1fr auto;
     position: absolute;
     inset: 48px 0 0 0;
-    background: #fff;
+    background: var(--surface);;
     z-index: 2;
 }
 
@@ -1529,8 +1590,8 @@ video[poster] {
 .chat-user-item {
     border-radius: 12px;
     margin-bottom: 6px;
-    background: rgba(255,255,255,.7);
-    border: 1px solid #f1ecea;
+    background: color-mix(in srgb, var(--surface) 92%, transparent);
+    border: 1px solid var(--border-soft);
 }
 
 .chat-active-header {
@@ -1538,7 +1599,7 @@ video[poster] {
     align-items: center;
     gap: 8px;
     padding: 10px;
-    background: #fff;
+    background: var(--surface);
 }
 
 .chat-back-btn {
@@ -1546,13 +1607,13 @@ video[poster] {
     width: 32px;
     height: 32px;
     border-radius: 50%;
-    background: #ffe3d8;
+    background: color-mix(in srgb, var(--accent) 22%, var(--surface));
     cursor: pointer;
     font-weight: 700;
 }
 
 .chat-messages {
-    background: linear-gradient(180deg, #fafafa 0%, #f3f8ff 100%);
+    background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 92%, #fff) 0%, color-mix(in srgb, var(--surface) 86%, #dbeafe 14%) 100%);
 }
 
 .chat-bubble {
@@ -2615,8 +2676,8 @@ header,
 }
 
 .memory-map-box {
-    background: linear-gradient(180deg, rgba(255,255,255,0.92) 0%, rgba(255,248,245,0.92) 100%);
-    border: 1px solid #ffd9ce;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 92%, #fff) 0%, color-mix(in srgb, var(--surface-soft) 90%, #fff) 100%);
+    border: 1px solid var(--border-soft);
     border-radius: 18px;
     padding: 16px;
     box-shadow: 0 10px 24px rgba(255,126,95,0.12);
@@ -2624,26 +2685,26 @@ header,
 
 .memory-map-box h2 {
     margin: 0 0 6px;
-    color: #ff6a48;
+    color: var(--accent);
 }
 
 .memory-map-box p {
     margin: 0 0 10px;
-    color: #6a5550;
+    color: var(--text-secondary);
 }
 
 #memory-map {
     width: 100%;
     height: min(380px, 62vh);
     border-radius: 14px;
-    border: 1px solid #f0d8cf;
+    border: 1px solid var(--border-soft);
     overflow: hidden;
 }
 
 .memory-map-note {
     display: block;
     margin-top: 8px;
-    color: #8a6f66;
+    color: var(--text-muted);
 }
 
 .memory-popup img {
