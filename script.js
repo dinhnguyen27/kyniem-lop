@@ -2014,35 +2014,6 @@ function goToIntroVideoStep() {
     }
 }
 
-async function openIntroMediaFullscreen() {
-    const videoEl = document.getElementById('intro-video-player');
-    const driveEl = document.getElementById('intro-drive-player');
-    const showingVideo = videoEl && videoEl.style.display !== 'none' && videoEl.src;
-    const target = showingVideo ? videoEl : (driveEl && driveEl.style.display !== 'none' ? driveEl : null);
-
-    if (!target) return alert('Chưa có video để mở toàn màn hình.');
-
-    try {
-        if (showingVideo && typeof videoEl.webkitEnterFullscreen === 'function') {
-            videoEl.webkitEnterFullscreen();
-            return;
-        }
-
-        const requestFs = target.requestFullscreen
-            || target.webkitRequestFullscreen
-            || target.msRequestFullscreen;
-        if (typeof requestFs === 'function') {
-            await requestFs.call(target);
-            return;
-        }
-
-        alert('Thiết bị này chưa hỗ trợ toàn màn hình cho video ở trình duyệt hiện tại.');
-    } catch (error) {
-        console.warn('Không thể mở fullscreen cho intro media:', error);
-        alert('Không mở được toàn màn hình. Bạn thử bấm biểu tượng fullscreen trên player nhé.');
-    }
-}
-
 function finishIntroExperience() {
     const introOverlay = document.getElementById('intro-overlay');
     const videoEl = document.getElementById('intro-video-player');
