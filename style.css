@@ -749,6 +749,11 @@ video[poster] {
 }
 .btn-surprise:hover { transform: scale(1.1) rotate(3deg); background: #feb47b; }
 
+.surprise-action-wrap {
+    text-align: center;
+    margin: 20px;
+}
+
 .reactions {
     display: flex;
     gap: 15px;
@@ -968,6 +973,14 @@ video[poster] {
 }
 
 .capsule-form textarea { height: 120px; resize: none; }
+
+.capsule-unlock-label {
+    display: block;
+    margin-top: 10px;
+    font-size: 14px;
+    color: #eee;
+    text-align: left;
+}
 
 .capsule-form button {
     margin-top: 20px;
@@ -1533,6 +1546,72 @@ video[poster] {
     color: #fff;
     font-weight: 700;
     cursor: pointer;
+}
+
+.capsule-highlight-title {
+    color: #ffeb3b;
+}
+
+.time-capsule-display {
+    margin-top: 30px;
+    border-top: 1px dashed rgba(255,255,255,0.5);
+    padding-top: 20px;
+}
+
+.time-capsule-display-title {
+    color: #ffeb3b;
+    font-family: 'Dancing Script', cursive;
+    font-size: 28px;
+}
+
+.time-capsule-display-description {
+    text-align: center;
+    color: #156;
+    font-family: 'Dancing Script', cursive;
+    margin-bottom: 30px;
+}
+
+.capsule-toolbar {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.capsule-toolbar-search {
+    flex: 2;
+    padding: 8px 15px;
+    border-radius: 20px;
+    border: none;
+}
+
+.capsule-toolbar-filter {
+    flex: 1;
+    border-radius: 20px;
+    padding: 5px 10px;
+    border: none;
+    cursor: pointer;
+}
+
+.capsule-loading-placeholder {
+    font-style: italic;
+    color: #ddd;
+    text-align: center;
+}
+
+.load-more-container {
+    text-align: center;
+    margin-top: 20px;
+}
+
+#btn-load-more {
+    padding: 10px 25px;
+    border-radius: 20px;
+    border: none;
+    background: #00f2fe;
+    color: #333;
+    font-weight: bold;
+    cursor: pointer;
+    display: none;
 }
 
 .profile-refresh-btn {
