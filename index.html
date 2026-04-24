@@ -110,7 +110,7 @@
             </div>
         </div>
 
-        <div style="text-align: center; margin: 20px;">
+        <div class="surprise-action-wrap">
             <button class="btn-surprise" onclick="showSurprise()">🎁 Xuyên không (Ngẫu nhiên)</button>
         </div>
 
@@ -122,7 +122,7 @@
                     <p>Những dòng tâm sự này sẽ được "khóa" lại và chỉ mở ra vào ngày đặc biệt.</p>
                     <input type="text" id="capsule-sender" placeholder="Tên của bạn...">
                     
-                    <label style="display:block; margin-top:10px; font-size:14px; color: #eee;">Ngày mở thư:</label>
+                    <label class="capsule-unlock-label">Ngày mở thư:</label>
                     <input type="date" id="unlock-date-input">
                     
                     <textarea id="capsule-message" placeholder="Bạn muốn nói gì với lớp mình sau này?"></textarea>
@@ -130,19 +130,19 @@
                 </div>
 
                 <div class="carousel-3d-container">
-                    <h3 style="color: #ffeb3b;">⭐ Thư nổi bật mới nhất</h3>
+                    <h3 class="capsule-highlight-title">⭐ Thư nổi bật mới nhất</h3>
                     <div id="capsule-carousel-3d">
                         </div>
                 </div>
 
-                <div id="time-capsule-display" style="margin-top: 30px; border-top: 1px dashed rgba(255,255,255,0.5); padding-top: 20px;">
-                    <h3 style="color: #ffeb3b; font-family: 'Dancing Script'; font-size: 28px;">📬 Hộp Thư Thời Gian</h3>
-                    <p style="text-align: center; color: #156; font-family: 'Dancing Script'; margin-bottom: 30px;">
+                <div id="time-capsule-display" class="time-capsule-display">
+                    <h3 class="time-capsule-display-title">📬 Hộp Thư Thời Gian</h3>
+                    <p class="time-capsule-display-description">
                          Những lời nhắn gửi đến tương lai. Thư sẽ tự động mở khi đến ngày hẹn.
                      </p>
                     <div class="capsule-toolbar" style="display: flex; gap: 10px; margin-bottom: 15px;">
-                        <input type="text" id="search-sender" onkeyup="filterCapsules()" placeholder="Tìm tên bạn..." style="flex: 2; padding: 8px 15px; border-radius: 20px; border: none;">
-                        <select id="filter-status" onchange="filterCapsules()" style="flex: 1; border-radius: 20px; padding: 5px 10px; border: none; cursor: pointer;">
+                        <input type="text" id="search-sender" class="capsule-toolbar-search" onkeyup="filterCapsules()" placeholder="Tìm tên bạn...">
+                        <select id="filter-status" class="capsule-toolbar-filter" onchange="filterCapsules()">
                             <option value="all">Tất cả</option>
                             <option value="unlocked">Đã mở ✅</option>
                             <option value="locked">Đang khóa 🔒</option>
@@ -150,9 +150,9 @@
                     </div>
 
                     <div id="capsule-messages-list">
-                        <p style='font-style:italic; color: #ddd; text-align: center;'>Đang tải những cánh thư...</p>
+                        <p class="capsule-loading-placeholder">Đang tải những cánh thư...</p>
                     </div>
-                    <div id="load-more-container" style="text-align: center; margin-top: 20px;">
+                    <div id="load-more-container" class="load-more-container">
                         <button id="btn-load-more" onclick="loadMoreCapsules()" style="padding: 10px 25px; border-radius: 20px; border: none; background: #00f2fe; color: #333; font-weight: bold; cursor: pointer; display: none;">
                             Xem thêm thư nào...
                         </button>
