@@ -134,12 +134,6 @@ exports.sendPushFromEvent = functions.region(PUSH_REGION).firestore
           },
           fcmOptions: {
             link: pushLink
-          },
-          notification: {
-            title: `💬 ${senderName} vừa nhắn tin`,
-            body: textPreview,
-            icon: 'https://www.gstatic.com/mobilesdk/160503_mobilesdk/logo/2x/firebase_28dp.png',
-            requireInteraction: true
           }
         }
       });
@@ -245,12 +239,6 @@ async function sendCapsulePush(userRef, tokens, event) {
       },
       fcmOptions: {
         link: pushLink
-      },
-      notification: {
-        title: '✉️ Hộp thư thời gian mở khóa',
-        body: event.body || 'Có thư mới vừa được mở khóa.',
-        icon: 'https://www.gstatic.com/mobilesdk/160503_mobilesdk/logo/2x/firebase_28dp.png',
-        requireInteraction: true
       }
     }
   });
@@ -290,13 +278,6 @@ async function sendGroupChatPush(tokens, event) {
       },
       fcmOptions: {
         link: pushLink
-      },
-      notification: {
-        title: body,
-        body: textPreview,
-        icon: 'https://www.gstatic.com/mobilesdk/160503_mobilesdk/logo/2x/firebase_28dp.png',
-        requireInteraction: true,
-        tag: notificationTag
       }
     }
   });
@@ -330,13 +311,6 @@ async function sendBroadcastPush(tokens, event) {
       },
       fcmOptions: {
         link: pushLink
-      },
-      notification: {
-        title,
-        body,
-        icon: 'https://www.gstatic.com/mobilesdk/160503_mobilesdk/logo/2x/firebase_28dp.png',
-        requireInteraction: true,
-        tag
       }
     }
   });
