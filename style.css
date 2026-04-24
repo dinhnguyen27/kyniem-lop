@@ -325,6 +325,16 @@ body {
     text-align: center;
 }
 
+body.dark-mode .intro-overlay {
+    background: radial-gradient(circle at top, rgba(30, 41, 59, 0.28), rgba(2, 6, 23, 0.82));
+}
+
+body.dark-mode .intro-card {
+    background: rgba(15, 23, 42, 0.72);
+    border-color: rgba(148, 163, 184, 0.35);
+    box-shadow: 0 28px 90px rgba(2, 6, 23, 0.65);
+}
+
 .intro-badge {
     display: inline-block;
     margin: 0 0 8px;
@@ -335,14 +345,28 @@ body {
     font-weight: 700;
 }
 
+body.dark-mode .intro-badge {
+    background: rgba(59, 130, 246, 0.2);
+    color: #bfdbfe;
+}
+
 .intro-card h2 {
     margin: 10px 0 16px;
     font-size: clamp(1.9rem, 4.7vw, 3.1rem);
     color: #111827;
 }
 
+body.dark-mode .intro-card h2 {
+    color: #f8fafc;
+}
+
 .intro-card p {
     color: #374151;
+}
+
+body.dark-mode .intro-card p,
+body.dark-mode .intro-description-text {
+    color: #dbeafe;
 }
 
 .intro-description-text {
@@ -364,16 +388,9 @@ body {
     padding: 11px 24px;
 }
 
-.intro-action-row {
-    margin-top: 16px;
-    display: flex;
-    gap: 10px;
-    justify-content: center;
-    flex-wrap: wrap;
-}
-
-.intro-fullscreen-btn {
-    background: linear-gradient(135deg, #2563eb, #4f46e5);
+body.dark-mode .intro-next-btn {
+    background: linear-gradient(135deg, #0ea5e9, #2563eb);
+    color: #f8fafc;
 }
 
 #intro-video-player {
@@ -384,6 +401,11 @@ body {
     background: #000;
     min-height: min(58vh, 520px);
     max-height: 68vh;
+}
+
+body.dark-mode #intro-video-player,
+body.dark-mode #intro-drive-player {
+    border-color: rgba(148, 163, 184, 0.45);
 }
 
 #intro-drive-player {
