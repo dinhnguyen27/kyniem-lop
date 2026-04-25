@@ -12,10 +12,11 @@
 
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#ff7e5f">
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ff7e5f">
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#12151d">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="Kỷ Niệm Lớp">
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/svg+xml" sizes="192x192" href="icons/icon-192.svg">
@@ -96,25 +97,25 @@
                 <img id="current-user-avatar" class="user-avatar" src="" alt="avatar">
                 <span id="current-user-display">Bạn chưa đăng nhập</span>
                 <span id="online-status" class="online-status offline">Offline</span>
-                <button id="enable-push-btn" onclick="enablePushNotifications()">Bật thông báo đẩy</button>
-                <button id="dark-mode-toggle" onclick="toggleDarkMode()">🌙 Chế độ tối</button>
+                <button id="enable-push-btn" class="chip-optional-btn" onclick="enablePushNotifications()">Bật thông báo đẩy</button>
+                <button id="dark-mode-toggle" class="chip-optional-btn" onclick="toggleDarkMode()">🌙 Chế độ tối</button>
                 <button onclick="openProfileModal()">Hồ sơ</button>
                 <button onclick="logoutUser()">Đăng xuất</button>
             </div>
         </header>
 
-        <div class="countdown-container">
+        <div class="countdown-container app-screen" data-screen="feed">
             <h3 id="countdown-title">Đếm ngược ngày thi Đại học</h3>
             <div id="timer">
                 <span id="days">00</span> ngày <span id="hours">00</span>:<span id="minutes">00</span>:<span id="seconds">00</span>
             </div>
         </div>
 
-        <div class="surprise-action-wrap">
+        <div class="surprise-action-wrap app-screen" data-screen="feed">
             <button class="btn-surprise" onclick="showSurprise()">🎁 Xuyên không (Ngẫu nhiên)</button>
         </div>
 
-        <section class="time-capsule-section" data-aos="zoom-in">
+        <section id="time-capsule-section" class="time-capsule-section app-screen" data-screen="capsule" data-aos="zoom-in" style="display:none;">
             <div class="capsule-box">
                 <h2>✉️ Gửi lời nhắn đến tương lai</h2>
                 
@@ -161,7 +162,7 @@
             </div>
         </section>
 
-        <section class="memory-map-section" data-aos="zoom-in">
+        <section id="memory-map-section" class="memory-map-section app-screen" data-screen="map" data-aos="zoom-in" style="display:none;">
             <div class="memory-map-box">
                 <h2>🗺️ Bản đồ kỷ niệm</h2>
                 <p>Nơi đánh dấu những địa điểm cả lớp từng gắn bó: quán ruột, công viên, chỗ dã ngoại...</p>
@@ -170,25 +171,56 @@
             </div>
         </section>
 
-        <div class="year-filter">
+        <div class="year-filter app-screen" data-screen="feed">
             <button class="filter-btn active" onclick="filterByYear('all')">Tất cả</button>
             <button class="filter-btn" onclick="filterByYear('2024')">2024</button>
             <button class="filter-btn" onclick="filterByYear('2025')">2025</button>
             <button class="filter-btn" onclick="filterByYear('2026')">2026</button>
         </div>
 
-        <div class="gallery" id="galleryGrid">
+        <div class="gallery app-screen" data-screen="feed" id="galleryGrid">
             </div>
 
-            
-    </div>
+        <section id="members-section" class="members-section app-screen" data-screen="members" style="display:none;">
+            <div class="members-box">
+                <h2>🧑‍🤝‍🧑 Thành viên lớp</h2>
+                <p>Cập nhật nhanh tình trạng hoạt động gần đây của cả lớp.</p>
+                <div id="members-list" class="members-list">
+                    <p class="members-empty">Đang tải danh sách thành viên...</p>
+                </div>
+            </div>
+        </section>
 
-        <div id="leaf-container"></div>     
-        
+        <nav class="bottom-nav-fb" aria-label="Điều hướng chính">
+            <button class="bottom-nav-item active" data-tab="feed" onclick="switchMainTab('feed')" aria-label="Bảng tin">
+                <i class="fa-solid fa-house"></i>
+                <span>Bảng tin</span>
+            </button>
+            <button class="bottom-nav-item" data-tab="capsule" onclick="switchMainTab('capsule')" aria-label="Hộp thư">
+                <i class="fa-solid fa-envelope-open-text"></i>
+                <span>Hộp thư</span>
+            </button>
+            <button class="bottom-nav-item" data-tab="map" onclick="switchMainTab('map')" aria-label="Bản đồ">
+                <i class="fa-solid fa-map-location-dot"></i>
+                <span>Bản đồ</span>
+            </button>
+            <button class="bottom-nav-item" data-tab="members" onclick="switchMainTab('members')" aria-label="Thành viên">
+                <i class="fa-solid fa-users"></i>
+                <span>Thành viên</span>
+            </button>
+            <button class="bottom-nav-item bottom-nav-chat" data-tab="chat" onclick="openChatFromTab()" aria-label="Chat">
+                <i class="fa-solid fa-comments"></i>
+                <span>Chat riêng</span>
+                <span id="chat-tab-unread-badge" class="app-tab-unread-badge" style="display:none;">0</span>
+            </button>
+            <button class="bottom-nav-item bottom-nav-chat" data-tab="group-chat" onclick="openGroupChatFromTab()" aria-label="Chat chung">
+                <i class="fa-solid fa-user-group"></i>
+                <span>Chat chung</span>
+                <span id="group-chat-tab-unread-badge" class="app-tab-unread-badge" style="display:none;">0</span>
+            </button>
+        </nav>
     </div>
-
-    <button id="chat-toggle-btn" class="chat-toggle-btn" onclick="toggleChatPanel()"><span class="chat-toggle-icon">💬</span><span class="chat-toggle-label">Chat</span><span id="chat-unread-badge" class="chat-unread-badge" style="display:none">0</span></button>
-    <button id="group-chat-toggle-btn" class="chat-toggle-btn group-chat-toggle-btn" onclick="toggleGroupChatPanel()"><span class="chat-toggle-icon">👥</span><span class="chat-toggle-label">Chat chung</span><span id="group-chat-unread-badge" class="chat-unread-badge" style="display:none">0</span></button>
+    <div id="leaf-container"></div>
 
     <div id="group-chat-panel" class="chat-panel group-chat-panel">
         <div class="chat-panel-header">
@@ -196,12 +228,20 @@
             <button onclick="toggleGroupChatPanel()">✕</button>
         </div>
         <div class="chat-conversation-view" style="display:flex;">
+            <div class="chat-search-wrap chat-inner-search-wrap">
+                <input id="group-chat-search" type="search" placeholder="Tìm trong chat chung..." autocomplete="off">
+            </div>
+            <div id="group-chat-pinned" class="chat-pinned-banner" style="display:none;"></div>
+            <div id="group-typing-indicator" class="chat-typing-indicator" style="display:none;"></div>
             <div class="chat-messages" id="group-chat-messages"></div>
+            <div id="group-reply-preview" class="chat-reply-preview" style="display:none;"></div>
             <div class="chat-input-row">
                 <button class="emoji-toggle-btn" onclick="toggleGroupEmojiPicker()">😊</button>
+                <button class="emoji-toggle-btn" onclick="triggerGroupImagePicker()" title="Gửi ảnh">🖼️</button>
                 <input id="group-chat-input" type="text" placeholder="Nhắn cho cả lớp..." autocomplete="off" autocapitalize="sentences" autocorrect="on" enterkeyhint="send">
                 <button onclick="sendGroupMessage()">Gửi</button>
             </div>
+            <input type="file" id="group-chat-image-input" accept="image/*" style="display:none;">
             <div id="group-emoji-picker" class="emoji-picker"></div>
         </div>
     </div>
@@ -224,12 +264,20 @@
                 <button class="chat-back-btn" onclick="closePrivateChat()">←</button>
                 <span id="chat-target-name">Chọn người để chat</span>
             </div>
+            <div class="chat-search-wrap chat-inner-search-wrap">
+                <input id="private-chat-search" type="search" placeholder="Tìm trong cuộc trò chuyện..." autocomplete="off">
+            </div>
+            <div id="private-chat-pinned" class="chat-pinned-banner" style="display:none;"></div>
+            <div id="private-typing-indicator" class="chat-typing-indicator" style="display:none;"></div>
             <div class="chat-messages" id="chat-messages"></div>
+            <div id="private-reply-preview" class="chat-reply-preview" style="display:none;"></div>
             <div class="chat-input-row">
                 <button class="emoji-toggle-btn" onclick="toggleEmojiPicker()">😊</button>
+                <button class="emoji-toggle-btn" onclick="triggerPrivateImagePicker()" title="Gửi ảnh">🖼️</button>
                 <input id="chat-input" type="text" placeholder="Nhắn gì đó..." autocomplete="off" autocapitalize="sentences" autocorrect="on" enterkeyhint="send" onkeypress="if(event.key==='Enter') sendPrivateMessage()">
                 <button onclick="sendPrivateMessage()">Gửi</button>
             </div>
+            <input type="file" id="private-chat-image-input" accept="image/*" style="display:none;">
             <div id="emoji-picker" class="emoji-picker"></div>
         </div>
     </div>
@@ -244,6 +292,9 @@
                 <small class="profile-avatar-hint">Chọn ảnh từ máy/điện thoại để làm avatar (hoặc dán link bên dưới). iPhone/Android có thể hỏi quyền truy cập Ảnh/Thư viện lần đầu.</small>
                 <input type="text" id="profile-avatar" placeholder="Link avatar (https://...) hoặc ảnh đã chọn sẽ tự điền" />
                 <input type="text" id="profile-name" placeholder="Họ và tên" />
+                <input type="text" id="profile-nickname" placeholder="Biệt danh thời đi học" />
+                <input type="number" id="profile-birth-year" placeholder="Năm sinh" min="1980" max="2030" />
+                <input type="text" id="profile-class-role" placeholder="Vai trò lớp (lớp trưởng, bí thư...)" />
                 <input type="tel" id="profile-phone" placeholder="Số điện thoại" />
                 <input type="email" id="profile-email" placeholder="Email" readonly />
                 <button onclick="saveProfile()">Lưu thay đổi</button>
@@ -292,6 +343,9 @@
         <div class="intro-card" data-step="video" style="display:none;">
             <p class="intro-badge">🎬 Video kỷ niệm</p>
             <h2>Khoảnh khắc dành cho cả lớp</h2>
+            <div id="intro-media-skeleton" class="intro-media-skeleton" style="display:none;" aria-hidden="true">
+                <div class="intro-media-skeleton-shimmer"></div>
+            </div>
             <video id="intro-video-player" controls playsinline preload="metadata"></video>
             <iframe id="intro-drive-player" title="Video kỷ niệm từ Google Drive" allow="autoplay; fullscreen" allowfullscreen style="display:none;"></iframe>
             <p id="intro-video-empty-note" class="intro-video-empty-note" style="display:none;">Chưa có video mở đầu. Bạn có thể cấu hình trong trang admin.</p>
