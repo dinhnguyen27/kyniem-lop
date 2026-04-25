@@ -1,12 +1,54 @@
 {
   "name": "Kỷ Niệm Lớp Chúng Mình",
   "short_name": "Kỷ Niệm Lớp",
+  "id": "/kyniem-lop/",
   "description": "Nơi lưu giữ những khoảnh khắc tuyệt vời của tập thể lớp.",
   "start_url": "/kyniem-lop/",
   "scope": "/kyniem-lop/",
   "display": "standalone",
-  "background_color": "#b8c6e6",
+  "background_color": "#fff4f0",
   "theme_color": "#ff7e5f",
+  "shortcuts": [
+    {
+      "name": "Mở Chat",
+      "short_name": "Chat",
+      "description": "Đi thẳng đến khu vực chat",
+      "url": "/kyniem-lop/?shortcut=chat",
+      "icons": [
+        {
+          "src": "icons/icon-192.svg",
+          "sizes": "192x192",
+          "type": "image/svg+xml"
+        }
+      ]
+    },
+    {
+      "name": "Mở Bản đồ",
+      "short_name": "Bản đồ",
+      "description": "Đến ngay bản đồ kỷ niệm",
+      "url": "/kyniem-lop/?shortcut=map",
+      "icons": [
+        {
+          "src": "icons/icon-192.svg",
+          "sizes": "192x192",
+          "type": "image/svg+xml"
+        }
+      ]
+    },
+    {
+      "name": "Mở Hộp thư",
+      "short_name": "Hộp thư",
+      "description": "Xem hộp thư thời gian",
+      "url": "/kyniem-lop/?shortcut=capsule",
+      "icons": [
+        {
+          "src": "icons/icon-192.svg",
+          "sizes": "192x192",
+          "type": "image/svg+xml"
+        }
+      ]
+    }
+  ],
   "orientation": "portrait-primary",
   "icons": [
     {
