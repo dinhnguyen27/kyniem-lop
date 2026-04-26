@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trang cá nhân</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="./profile.css">
+</head>
+<body>
+    <main class="profile-page">
+        <section class="profile-header" id="profileHeader">
+            <div class="cover-wrap">
+                <img id="profileCover" class="cover-photo" src="https://images.unsplash.com/photo-1517816743773-6e0fd518b4a6?auto=format&fit=crop&w=1280&q=80" alt="Ảnh bìa">
+            </div>
+            <div class="profile-main">
+                <img id="profileAvatar" class="profile-avatar" src="" alt="Avatar người dùng">
+                <h1 id="profileName">Đang tải...</h1>
+                <button id="profileActionBtn" class="profile-action-btn">...</button>
+            </div>
+            <div class="profile-tabs" role="tablist" aria-label="Tab trang cá nhân">
+                <button class="tab-btn active" data-tab="posts">Bài viết</button>
+                <button class="tab-btn" data-tab="photos">Ảnh</button>
+                <button class="tab-btn" data-tab="info">Thông tin</button>
+            </div>
+        </section>
+
+        <section class="profile-content">
+            <div id="tab-posts" class="tab-panel active"></div>
+            <div id="tab-photos" class="tab-panel photo-grid"></div>
+            <div id="tab-info" class="tab-panel info-grid"></div>
+        </section>
+    </main>
+
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <script src="./profile.js"></script>
+</body>
+</html>
