@@ -1379,7 +1379,7 @@ function renderChatUsers(users) {
 
         return `<div class="chat-user-item ${online ? 'online' : ''}" onclick="openPrivateChatByEmail('${email}')">
             <span class="dot"></span>
-            <img class="comment-avatar" src="${avatar}" alt="avatar">
+            <img class="comment-avatar" src="${avatar}" alt="avatar" onclick="event.stopPropagation(); openProfileByEmail('${email}')">
             <div class="chat-user-texts">
                 <div class="chat-user-head">
                     <span class="chat-user-label">${u.name || u.email}</span>
@@ -1408,7 +1408,7 @@ function renderMembersDirectory(users = []) {
         const online = getOnlineStateFromTimestamp(u.lastActiveAt) && !!u.isOnline;
         const status = online ? '🟢 Đang online' : escapeHtml(formatLastSeenLabel(u.lastActiveAt) || 'Offline');
         return `<div class="member-item">
-            <img class="comment-avatar" src="${escapeHtml(u.avatar || buildAvatarUrl(u.name || 'Bạn'))}" alt="avatar">
+            <img class="comment-avatar" src="${escapeHtml(u.avatar || buildAvatarUrl(u.name || 'Bạn'))}" alt="avatar" onclick="openProfileByEmail('${escapeHtml((u.email || '').toLowerCase())}')">
             <div>
                 <strong>${escapeHtml(u.name || u.email || 'Thành viên')}</strong>
                 <div class="meta">${escapeHtml(u.classRole || 'Thành viên')} • ${status}</div>
@@ -2274,6 +2274,21 @@ function openChatSelectorFromTab() {
     syncOverlayUIState();
 }
 
+function openProfileByEmail(email) {
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    if (!normalizedEmail) return;
+    window.location.href = `profile.html?id=${encodeURIComponent(normalizedEmail)}`;
+}
+
+function openOwnProfilePage() {
+    const me = getCurrentUser();
+    if (!me?.email) {
+        alert('Bạn cần đăng nhập để xem trang cá nhân.');
+        return;
+    }
+    openProfileByEmail(me.email);
+}
+
 function openNavMenuFromTab() {
     document.querySelectorAll('.bottom-nav-item').forEach((btn) => btn.classList.remove('active'));
     document.querySelector('.bottom-nav-item[data-tab="menu"]')?.classList.add('active');
@@ -2360,9 +2375,9 @@ function toggleMuteGroupChat() {
 }
 
 function viewChatTargetProfile() {
-    if (!selectedChatUser) return;
+    if (!selectedChatUser?.email) return;
     closeChatActionSheet();
-    alert(`Hồ sơ: ${selectedChatUser.name || selectedChatUser.email}\nEmail: ${selectedChatUser.email || '---'}\nSĐT: ${selectedChatUser.phone || '---'}`);
+    openProfileByEmail(selectedChatUser.email);
 }
 
 function toggleChatThemeAccent() {
@@ -3032,6 +3047,8 @@ window.switchMainTab = switchMainTab;
 window.openChatSelectorFromTab = openChatSelectorFromTab;
 window.closeChatSelectorModal = closeChatSelectorModal;
 window.openNavMenuFromTab = openNavMenuFromTab;
+window.openOwnProfilePage = openOwnProfilePage;
+window.openProfileByEmail = openProfileByEmail;
 window.closeNavMenuModal = closeNavMenuModal;
 window.openChatActionSheet = openChatActionSheet;
 window.closeChatActionSheet = closeChatActionSheet;
