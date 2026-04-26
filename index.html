@@ -18,12 +18,13 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="Kỷ Niệm Lớp">
-    <link rel="manifest" href="manifest.json">
-    <link rel="icon" type="image/svg+xml" sizes="192x192" href="icons/icon-192.svg">
-    <link rel="apple-touch-icon" href="icons/icon-192.svg">
+    <link rel="manifest" href="./manifest.json">
+    <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
+    <link rel="icon" type="image/svg+xml" sizes="192x192" href="./icons/icon-192.svg">
+    <link rel="apple-touch-icon" sizes="192x192" href="./icons/icon-192.png">
     <title>Kỷ Niệm Lớp Chúng Mình</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="./style.css">
     <link rel="preconnect" href="https://drive.google.com">
     <link rel="preconnect" href="https://docs.googleusercontent.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Quicksand:wght@400;600&display=swap" rel="stylesheet">
@@ -97,10 +98,6 @@
                 <img id="current-user-avatar" class="user-avatar" src="" alt="avatar">
                 <span id="current-user-display">Bạn chưa đăng nhập</span>
                 <span id="online-status" class="online-status offline">Offline</span>
-                <button id="enable-push-btn" class="chip-optional-btn" onclick="enablePushNotifications()">Bật thông báo đẩy</button>
-                <button id="dark-mode-toggle" class="chip-optional-btn" onclick="toggleDarkMode()">🌙 Chế độ tối</button>
-                <button onclick="openProfileModal()">Hồ sơ</button>
-                <button onclick="logoutUser()">Đăng xuất</button>
             </div>
         </header>
 
@@ -208,38 +205,68 @@
                 <i class="fa-solid fa-users"></i>
                 <span>Thành viên</span>
             </button>
-            <button class="bottom-nav-item bottom-nav-chat" data-tab="chat" onclick="openChatFromTab()" aria-label="Chat">
+            <button class="bottom-nav-item bottom-nav-chat" data-tab="chat" onclick="openChatSelectorFromTab()" aria-label="Chat">
                 <i class="fa-solid fa-comments"></i>
-                <span>Chat riêng</span>
+                <span>Chat</span>
                 <span id="chat-tab-unread-badge" class="app-tab-unread-badge" style="display:none;">0</span>
             </button>
-            <button class="bottom-nav-item bottom-nav-chat" data-tab="group-chat" onclick="openGroupChatFromTab()" aria-label="Chat chung">
-                <i class="fa-solid fa-user-group"></i>
-                <span>Chat chung</span>
-                <span id="group-chat-tab-unread-badge" class="app-tab-unread-badge" style="display:none;">0</span>
+            <button class="bottom-nav-item" data-tab="menu" onclick="openNavMenuFromTab()" aria-label="Menu">
+                <i class="fa-solid fa-bars"></i>
+                <span>Menu</span>
             </button>
         </nav>
     </div>
     <div id="leaf-container"></div>
 
+    <div id="chat-selector-modal" class="chat-selector-modal" style="display:none;">
+        <div class="chat-selector-content">
+            <h3>Chọn kiểu trò chuyện</h3>
+            <button type="button" onclick="openChatFromTab()">💬 Chat riêng</button>
+            <button type="button" onclick="openGroupChatFromTab()">👥 Chat chung</button>
+            <button type="button" class="chat-selector-close" onclick="closeChatSelectorModal()">Đóng</button>
+        </div>
+    </div>
+
+    <div id="nav-menu-modal" class="chat-selector-modal" style="display:none;">
+        <div class="chat-selector-content">
+            <h3>Tùy chọn nhanh</h3>
+            <button id="enable-push-btn" class="chip-optional-btn" onclick="enablePushNotifications()">🔔 Bật thông báo đẩy</button>
+            <button id="dark-mode-toggle" class="chip-optional-btn" onclick="toggleDarkMode()">🌙 Chế độ tối</button>
+            <button type="button" onclick="openProfileModal()">👤 Hồ sơ</button>
+            <button type="button" onclick="showAccountDataSummary()">🗂️ Dữ liệu tài khoản</button>
+            <button type="button" onclick="logoutUser()">🚪 Đăng xuất</button>
+            <button type="button" class="chat-selector-close" onclick="closeNavMenuModal()">Đóng</button>
+        </div>
+    </div>
+
     <div id="group-chat-panel" class="chat-panel group-chat-panel">
         <div class="chat-panel-header">
-            <strong>Nhóm chat chung</strong>
+            <button class="chat-back-btn" onclick="closeGroupChatPanelToSelector()">←</button>
+            <button type="button" class="chat-header-info" onclick="openGroupActionSheet()">
+                <span class="chat-header-avatar-wrap">
+                    <img id="group-chat-avatar" class="chat-header-avatar" src="" alt="avatar nhóm">
+                    <span class="chat-presence-dot online"></span>
+                </span>
+                <span class="chat-header-meta">
+                    <strong>Nhóm chat chung</strong>
+                    <small>Cả lớp đang trò chuyện</small>
+                </span>
+            </button>
+            <button type="button" class="chat-header-menu-btn" onclick="openGroupActionSheet()">
+                <i class="fa-solid fa-ellipsis"></i>
+            </button>
             <button onclick="toggleGroupChatPanel()">✕</button>
         </div>
         <div class="chat-conversation-view" style="display:flex;">
-            <div class="chat-search-wrap chat-inner-search-wrap">
-                <input id="group-chat-search" type="search" placeholder="Tìm trong chat chung..." autocomplete="off">
-            </div>
             <div id="group-chat-pinned" class="chat-pinned-banner" style="display:none;"></div>
             <div id="group-typing-indicator" class="chat-typing-indicator" style="display:none;"></div>
             <div class="chat-messages" id="group-chat-messages"></div>
             <div id="group-reply-preview" class="chat-reply-preview" style="display:none;"></div>
             <div class="chat-input-row">
-                <button class="emoji-toggle-btn" onclick="toggleGroupEmojiPicker()">😊</button>
-                <button class="emoji-toggle-btn" onclick="triggerGroupImagePicker()" title="Gửi ảnh">🖼️</button>
+                <button class="emoji-toggle-btn" onclick="toggleGroupEmojiPicker()"><i class="fa-regular fa-face-smile"></i></button>
+                <button class="emoji-toggle-btn" onclick="triggerGroupImagePicker()" title="Gửi ảnh"><i class="fa-solid fa-paperclip"></i></button>
                 <input id="group-chat-input" type="text" placeholder="Nhắn cho cả lớp..." autocomplete="off" autocapitalize="sentences" autocorrect="on" enterkeyhint="send">
-                <button onclick="sendGroupMessage()">Gửi</button>
+                <button class="chat-send-btn" onclick="sendGroupMessage()"><i class="fa-solid fa-paper-plane"></i></button>
             </div>
             <input type="file" id="group-chat-image-input" accept="image/*" style="display:none;">
             <div id="group-emoji-picker" class="emoji-picker"></div>
@@ -260,22 +287,31 @@
         </div>
 
         <div class="chat-conversation-view" id="chat-conversation-view">
-            <div class="chat-active-header">
+            <div class="chat-active-header chat-glass-header">
                 <button class="chat-back-btn" onclick="closePrivateChat()">←</button>
-                <span id="chat-target-name">Chọn người để chat</span>
-            </div>
-            <div class="chat-search-wrap chat-inner-search-wrap">
-                <input id="private-chat-search" type="search" placeholder="Tìm trong cuộc trò chuyện..." autocomplete="off">
+                <button type="button" class="chat-header-info" onclick="openChatActionSheet()">
+                    <span class="chat-header-avatar-wrap">
+                        <img id="chat-target-avatar" class="chat-header-avatar" src="" alt="avatar người chat">
+                        <span id="chat-target-presence-dot" class="chat-presence-dot offline"></span>
+                    </span>
+                    <span class="chat-header-meta">
+                        <strong id="chat-target-name">Chọn người để chat</strong>
+                        <small id="chat-target-status">Chưa chọn cuộc trò chuyện</small>
+                    </span>
+                </button>
+                <button type="button" class="chat-header-menu-btn" onclick="openChatActionSheet()">
+                    <i class="fa-solid fa-ellipsis"></i>
+                </button>
             </div>
             <div id="private-chat-pinned" class="chat-pinned-banner" style="display:none;"></div>
             <div id="private-typing-indicator" class="chat-typing-indicator" style="display:none;"></div>
             <div class="chat-messages" id="chat-messages"></div>
             <div id="private-reply-preview" class="chat-reply-preview" style="display:none;"></div>
             <div class="chat-input-row">
-                <button class="emoji-toggle-btn" onclick="toggleEmojiPicker()">😊</button>
-                <button class="emoji-toggle-btn" onclick="triggerPrivateImagePicker()" title="Gửi ảnh">🖼️</button>
+                <button class="emoji-toggle-btn" onclick="toggleEmojiPicker()"><i class="fa-regular fa-face-smile"></i></button>
+                <button class="emoji-toggle-btn" onclick="triggerPrivateImagePicker()" title="Gửi ảnh"><i class="fa-solid fa-paperclip"></i></button>
                 <input id="chat-input" type="text" placeholder="Nhắn gì đó..." autocomplete="off" autocapitalize="sentences" autocorrect="on" enterkeyhint="send" onkeypress="if(event.key==='Enter') sendPrivateMessage()">
-                <button onclick="sendPrivateMessage()">Gửi</button>
+                <button class="chat-send-btn" onclick="sendPrivateMessage()"><i class="fa-solid fa-paper-plane"></i></button>
             </div>
             <input type="file" id="private-chat-image-input" accept="image/*" style="display:none;">
             <div id="emoji-picker" class="emoji-picker"></div>
@@ -298,8 +334,31 @@
                 <input type="tel" id="profile-phone" placeholder="Số điện thoại" />
                 <input type="email" id="profile-email" placeholder="Email" readonly />
                 <button onclick="saveProfile()">Lưu thay đổi</button>
+                <button type="button" class="profile-refresh-btn" onclick="showInstallGuide()">📲 Hướng dẫn cài app</button>
                 <button type="button" class="profile-refresh-btn" onclick="refreshWebApp()">🔄 Làm mới web/app</button>
             </div>
+        </div>
+    </div>
+
+    <div id="chat-action-sheet" class="chat-selector-modal" style="display:none;">
+        <div class="chat-selector-content chat-action-sheet-content">
+            <h3>Tùy chọn cuộc trò chuyện</h3>
+            <button type="button" onclick="searchCurrentPrivateChat()"><i class="fa-solid fa-magnifying-glass"></i> Tìm trong cuộc trò chuyện</button>
+            <button type="button" onclick="viewChatTargetProfile()"><i class="fa-regular fa-user"></i> Xem hồ sơ</button>
+            <button type="button" onclick="toggleChatThemeAccent()"><i class="fa-solid fa-palette"></i> Đổi màu chủ đề</button>
+            <button type="button" onclick="showSharedMediaStub()"><i class="fa-regular fa-images"></i> Ảnh & File đã gửi</button>
+            <button type="button" onclick="toggleMutePrivateChat()"><i class="fa-regular fa-bell-slash"></i> Tắt thông báo</button>
+            <button type="button" class="chat-selector-close" onclick="closeChatActionSheet()">Đóng</button>
+        </div>
+    </div>
+
+    <div id="group-action-sheet" class="chat-selector-modal" style="display:none;">
+        <div class="chat-selector-content chat-action-sheet-content">
+            <h3>Tùy chọn nhóm chat</h3>
+            <button type="button" onclick="searchGroupChatFromMenu()"><i class="fa-solid fa-magnifying-glass"></i> Tìm trong chat chung</button>
+            <button type="button" onclick="changeGroupAvatar()"><i class="fa-regular fa-image"></i> Đổi ảnh nhóm</button>
+            <button type="button" onclick="toggleMuteGroupChat()"><i class="fa-regular fa-bell-slash"></i> Tắt thông báo nhóm</button>
+            <button type="button" class="chat-selector-close" onclick="closeGroupActionSheet()">Đóng</button>
         </div>
     </div>
 
@@ -347,7 +406,7 @@
                 <div class="intro-media-skeleton-shimmer"></div>
             </div>
             <video id="intro-video-player" controls playsinline preload="metadata"></video>
-            <iframe id="intro-drive-player" title="Video kỷ niệm từ Google Drive" allow="autoplay; fullscreen" allowfullscreen style="display:none;"></iframe>
+            <iframe id="intro-drive-player" title="Video kỷ niệm từ Google Drive" allow="autoplay; fullscreen" style="display:none;"></iframe>
             <p id="intro-video-empty-note" class="intro-video-empty-note" style="display:none;">Chưa có video mở đầu. Bạn có thể cấu hình trong trang admin.</p>
             <button type="button" class="intro-next-btn" onclick="finishIntroExperience()">Vào trang chính</button>
         </div>
@@ -367,6 +426,6 @@
       });
 
     </script>
-    <script src="script.js"></script>
+    <script src="./script.js"></script>
 </body>
 </html>
