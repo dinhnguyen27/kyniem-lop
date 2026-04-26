@@ -95,7 +95,7 @@
             <h1>Hành Trình Thanh Xuân</h1>
             <p>Nơi lưu giữ những mảnh ghép thời học sinh</p>
             <div class="user-chip">
-                <img id="current-user-avatar" class="user-avatar" src="" alt="avatar">
+                <img id="current-user-avatar" class="user-avatar" src="" alt="avatar" onclick="openOwnProfilePage()">
                 <span id="current-user-display">Bạn chưa đăng nhập</span>
                 <span id="online-status" class="online-status offline">Offline</span>
             </div>
@@ -233,7 +233,7 @@
             <button id="enable-push-btn" class="chip-optional-btn" onclick="enablePushNotifications()">🔔 Bật thông báo đẩy</button>
             <button id="dark-mode-toggle" class="chip-optional-btn" onclick="toggleDarkMode()">🌙 Chế độ tối</button>
             <button type="button" onclick="openProfileModal()">👤 Hồ sơ</button>
-            <button type="button" onclick="showAccountDataSummary()">🗂️ Dữ liệu tài khoản</button>
+            <button type="button" onclick="refreshWebApp()">🔄 Làm mới web/app</button>
             <button type="button" onclick="logoutUser()">🚪 Đăng xuất</button>
             <button type="button" class="chat-selector-close" onclick="closeNavMenuModal()">Đóng</button>
         </div>
@@ -335,7 +335,6 @@
                 <input type="email" id="profile-email" placeholder="Email" readonly />
                 <button onclick="saveProfile()">Lưu thay đổi</button>
                 <button type="button" class="profile-refresh-btn" onclick="showInstallGuide()">📲 Hướng dẫn cài app</button>
-                <button type="button" class="profile-refresh-btn" onclick="refreshWebApp()">🔄 Làm mới web/app</button>
             </div>
         </div>
     </div>
