@@ -98,6 +98,7 @@
                 <img id="current-user-avatar" class="user-avatar" src="" alt="avatar" onclick="openOwnProfilePage()">
                 <span id="current-user-display">Bạn chưa đăng nhập</span>
                 <span id="online-status" class="online-status offline">Offline</span>
+                <button type="button" id="notification-bell" class="notification-bell" onclick="toggleNotificationCenter()" aria-label="Thông báo"><i class="fa-regular fa-bell"></i><span id="notification-badge" class="notification-badge" style="display:none;">0</span></button>
             </div>
         </header>
 
@@ -108,6 +109,16 @@
             </div>
         </div>
 
+
+        <section id="story-strip" class="story-strip app-screen" data-screen="feed">
+            <div class="story-scroll" id="story-scroll">
+                <button type="button" class="story-add-btn" onclick="openStoryComposer()">
+                    <span>+</span>
+                    <small>Tạo Story</small>
+                </button>
+                <div id="story-items" class="story-items"></div>
+            </div>
+        </section>
         <div class="surprise-action-wrap app-screen" data-screen="feed">
             <button class="btn-surprise" onclick="showSurprise()">🎁 Xuyên không (Ngẫu nhiên)</button>
         </div>
@@ -188,6 +199,18 @@
             </div>
         </section>
 
+
+
+        <div id="notification-center" class="notification-center" style="display:none;">
+            <div class="notification-center-head">
+                <strong>Thông báo gần đây</strong>
+                <button type="button" onclick="markAllNotificationsRead()">Đánh dấu đã đọc</button>
+            </div>
+            <div id="notification-list" class="notification-list">
+                <p class="members-empty">Đang tải thông báo...</p>
+            </div>
+        </div>
+
         <nav class="bottom-nav-fb" aria-label="Điều hướng chính">
             <button class="bottom-nav-item active" data-tab="feed" onclick="switchMainTab('feed')" aria-label="Bảng tin">
                 <i class="fa-solid fa-house"></i>
@@ -232,7 +255,6 @@
             <h3>Tùy chọn nhanh</h3>
             <button id="enable-push-btn" class="chip-optional-btn" onclick="enablePushNotifications()">🔔 Bật thông báo đẩy</button>
             <button id="dark-mode-toggle" class="chip-optional-btn" onclick="toggleDarkMode()">🌙 Chế độ tối</button>
-            <button type="button" onclick="openProfileModal()">👤 Hồ sơ</button>
             <button type="button" onclick="refreshWebApp()">🔄 Làm mới web/app</button>
             <button type="button" onclick="logoutUser()">🚪 Đăng xuất</button>
             <button type="button" class="chat-selector-close" onclick="closeNavMenuModal()">Đóng</button>
@@ -361,6 +383,26 @@
         </div>
     </div>
 
+
+
+    <div id="story-composer-modal" class="chat-selector-modal" style="display:none;">
+        <div class="chat-selector-content story-composer-content">
+            <h3>Đăng Story 24h</h3>
+            <div id="story-preview-box" class="story-preview-box">
+                <span>Chưa chọn ảnh/video</span>
+            </div>
+            <textarea id="story-caption-input" placeholder="Viết caption cho story..."></textarea>
+            <div class="story-composer-actions">
+                <label class="story-upload-btn">
+                    <i class="fa-regular fa-image"></i> Chọn ảnh/video
+                    <input id="story-media-input" type="file" accept="image/*,video/*" hidden>
+                </label>
+                <button type="button" onclick="submitStoryPost()">Đăng Story</button>
+            </div>
+            <button type="button" class="chat-selector-close" onclick="closeStoryComposerModal()">Đóng</button>
+        </div>
+    </div>
+
     <div id="lightbox" class="lightbox">
         <span class="close-btn" onclick="closeLightbox()">&times;</span>
         <div class="lightbox-content" id="lightboxContent"></div>
@@ -414,6 +456,7 @@
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-storage.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-messaging.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/vanilla-tilt/1.8.1/vanilla-tilt.min.js"></script>
     <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
