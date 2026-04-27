@@ -14,6 +14,7 @@ if (!firebase.apps.length) {
     firebase.initializeApp(firebaseConfig);
 }
 const db = firebase.firestore();
+const storage = firebase.storage ? firebase.storage() : null;
 
 
 const ACCOUNTS_KEY = 'class_accounts';
@@ -79,6 +80,9 @@ let lightboxRotation = 0;
 let deferredInstallPrompt = null;
 let groupChatUnreadCount = 0;
 let pushNudgeTimer = null;
+let notificationCenterUnsubscribe = null;
+let notificationsUnreadCount = 0;
+let storiesUnsubscribe = null;
 
 const MESSAGE_COOLDOWN_MS = 1200;
 const TYPING_EXPIRE_MS = 5000;
@@ -2139,6 +2143,8 @@ function enterMainSite() {
     autoEnablePushIfPossible();
     initAutoPushEnableOnFirstGesture();
     ensurePushPermissionNudge();
+    initNotificationCenter();
+    initStoriesStrip();
     switchMainTab(currentMainTab || 'feed');
     handleShortcutNavigation();
 }
@@ -3081,6 +3087,252 @@ window.showInstallGuide = showInstallGuide;
 window.toggleTopQuickMenu = toggleTopQuickMenu;
 window.showAccountDataSummary = showAccountDataSummary;
 window.retryGalleryLoad = retryGalleryLoad;
+window.toggleNotificationCenter = toggleNotificationCenter;
+window.openNotification = openNotification;
+window.markAllNotificationsRead = markAllNotificationsRead;
+window.openStoryComposer = openStoryComposer;
+window.closeStoryComposerModal = closeStoryComposerModal;
+window.submitStoryPost = submitStoryPost;
+window.openStoryViewer = openStoryViewer;
+
+
+
+async function createNotification(targetEmail, type, message, link = '', meta = {}) {
+    const toEmail = String(targetEmail || '').trim().toLowerCase();
+    if (!toEmail) return;
+
+    const actor = getCurrentUser();
+    const payload = {
+        targetEmail: toEmail,
+        type: String(type || 'general'),
+        message: String(message || ''),
+        link: String(link || ''),
+        actorEmail: (actor?.email || '').toLowerCase(),
+        actorName: actor?.name || actor?.email || 'Thành viên',
+        actorAvatar: actor?.avatar || '',
+        createdAt: Date.now(),
+        read: false,
+        ...meta
+    };
+
+    await db.collection('notifications').add(payload).catch(() => {});
+    await queueNotificationEvent(`notify_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, {
+        type: 'general_notification',
+        title: 'Thông báo mới',
+        body: payload.message,
+        link: payload.link
+    }).catch(() => {});
+}
+
+function renderNotificationCenter(items = []) {
+    const list = document.getElementById('notification-list');
+    const badge = document.getElementById('notification-badge');
+    if (!list || !badge) return;
+
+    notificationsUnreadCount = items.filter((it) => !it.read).length;
+    badge.style.display = notificationsUnreadCount > 0 ? 'grid' : 'none';
+    badge.textContent = notificationsUnreadCount > 99 ? '99+' : String(notificationsUnreadCount);
+
+    if (!items.length) {
+        list.innerHTML = '<p class="members-empty">Chưa có thông báo mới.</p>';
+        return;
+    }
+
+    list.innerHTML = items.map((item) => {
+        const text = escapeHtml(item.message || 'Thông báo');
+        const time = formatChatRecencyLabel(item.createdAt);
+        return `<div class="notification-item ${item.read ? '' : 'unread'}" onclick="openNotification('${item.id}')">
+            <strong>${text}</strong>
+            <div style="font-size:12px;color:#6b7280;">${escapeHtml(time || 'vừa xong')}</div>
+        </div>`;
+    }).join('');
+}
+
+function toggleNotificationCenter() {
+    const panel = document.getElementById('notification-center');
+    if (!panel) return;
+    panel.style.display = panel.style.display === 'none' || !panel.style.display ? 'block' : 'none';
+}
+
+async function openNotification(notificationId) {
+    if (!notificationId) return;
+    const ref = db.collection('notifications').doc(notificationId);
+    const snap = await ref.get().catch(() => null);
+    if (snap?.exists) {
+        const data = snap.data() || {};
+        await ref.set({ read: true }, { merge: true }).catch(() => {});
+        if (data.link) {
+            window.location.href = data.link;
+        }
+    }
+}
+
+async function markAllNotificationsRead() {
+    const me = getCurrentUser();
+    if (!me?.email) return;
+    const snap = await db.collection('notifications')
+        .where('targetEmail', '==', me.email.toLowerCase())
+        .where('read', '==', false)
+        .limit(120)
+        .get()
+        .catch(() => null);
+    if (!snap || snap.empty) return;
+    const batch = db.batch();
+    snap.forEach((doc) => batch.set(doc.ref, { read: true }, { merge: true }));
+    await batch.commit().catch(() => {});
+}
+
+function initNotificationCenter() {
+    const me = getCurrentUser();
+    if (!me?.email) return;
+    if (notificationCenterUnsubscribe) {
+        notificationCenterUnsubscribe();
+        notificationCenterUnsubscribe = null;
+    }
+
+    notificationCenterUnsubscribe = db.collection('notifications')
+        .where('targetEmail', '==', me.email.toLowerCase())
+        .orderBy('createdAt', 'desc')
+        .limit(40)
+        .onSnapshot((snap) => {
+            const items = snap.docs.map((doc) => ({ id: doc.id, ...(doc.data() || {}) }));
+            renderNotificationCenter(items);
+        }, () => {});
+}
+
+function openStoryComposer() {
+    const me = getCurrentUser();
+    if (!me?.email) {
+        alert('Vui lòng đăng nhập để đăng story.');
+        return;
+    }
+
+    const modal = document.getElementById('story-composer-modal');
+    const preview = document.getElementById('story-preview-box');
+    const caption = document.getElementById('story-caption-input');
+    const input = document.getElementById('story-media-input');
+    if (!modal || !preview || !caption || !input) return;
+
+    caption.value = '';
+    input.value = '';
+    preview.innerHTML = '<span>Chưa chọn ảnh/video</span>';
+    modal.style.display = 'flex';
+}
+
+function closeStoryComposerModal() {
+    const modal = document.getElementById('story-composer-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+function previewStoryMediaFile(file) {
+    const preview = document.getElementById('story-preview-box');
+    if (!preview || !file) return;
+    const url = URL.createObjectURL(file);
+    if (String(file.type || '').startsWith('video/')) {
+        preview.innerHTML = `<video src="${url}" controls playsinline></video>`;
+    } else {
+        preview.innerHTML = `<img src="${url}" alt="story preview">`;
+    }
+}
+
+async function uploadStoryFileToStorage(file) {
+    if (!storage || !file) return '';
+    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+    const ref = storage.ref(`stories/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`);
+    await ref.put(file);
+    return ref.getDownloadURL();
+}
+
+async function submitStoryPost() {
+    const me = getCurrentUser();
+    if (!me?.email) return;
+
+    const input = document.getElementById('story-media-input');
+    const captionInput = document.getElementById('story-caption-input');
+    const file = input?.files?.[0] || null;
+    const caption = (captionInput?.value || '').trim();
+    if (!file) {
+        alert('Bạn cần chọn ảnh hoặc video để đăng story.');
+        return;
+    }
+
+    try {
+        const mediaUrl = await uploadStoryFileToStorage(file);
+        if (!mediaUrl) throw new Error('missing_story_media_url');
+
+        const now = Date.now();
+        await db.collection('stories').add({
+            userEmail: me.email.toLowerCase(),
+            userName: me.name || me.email,
+            userAvatar: me.avatar || buildAvatarUrl(me.name || me.email),
+            mediaUrl,
+            caption,
+            createdAt: now,
+            expiresAt: now + (24 * 60 * 60 * 1000)
+        });
+
+        const usersSnap = await db.collection('users').get().catch(() => null);
+        if (usersSnap) {
+            const actorName = me.name || me.email;
+            const tasks = [];
+            usersSnap.forEach((doc) => {
+                const u = doc.data() || {};
+                const email = (u.email || '').toLowerCase();
+                if (!email || email === me.email.toLowerCase()) return;
+                tasks.push(createNotification(email, 'story', `${actorName} vừa đăng story mới`, `index.html?story=${encodeURIComponent(me.email.toLowerCase())}`));
+            });
+            await Promise.allSettled(tasks);
+        }
+
+        closeStoryComposerModal();
+    } catch (error) {
+        alert('Đăng story thất bại. Vui lòng thử lại.');
+    }
+}
+
+
+function openStoryViewer(mediaUrl, ownerName = 'Story') {
+    if (!mediaUrl) return;
+    const isVideo = /\.mp4|\.webm|video/i.test(String(mediaUrl || ''));
+    openLightbox(String(mediaUrl || ''), isVideo);
+}
+
+function initStoriesStrip() {
+    document.getElementById('story-media-input')?.addEventListener('change', (event) => {
+        const file = event.target.files?.[0];
+        if (file) previewStoryMediaFile(file);
+    });
+    if (storiesUnsubscribe) {
+        storiesUnsubscribe();
+        storiesUnsubscribe = null;
+    }
+
+    const container = document.getElementById('story-items');
+    if (!container) return;
+
+    const now = Date.now();
+    storiesUnsubscribe = db.collection('stories')
+        .where('expiresAt', '>', now)
+        .orderBy('expiresAt', 'asc')
+        .onSnapshot((snap) => {
+            const stories = snap.docs.map((doc) => ({ id: doc.id, ...(doc.data() || {}) }));
+            if (!stories.length) {
+                container.innerHTML = '<div class="story-empty">Chưa có story mới. Hãy tạo story đầu tiên của lớp nhé!</div>';
+                return;
+            }
+            container.innerHTML = stories.map((story) => {
+                const cover = escapeHtml(story.mediaUrl || buildAvatarUrl(story.userName || 'Story'));
+                const name = escapeHtml((story.userName || 'Story').slice(0, 12));
+                const cap = escapeHtml((story.caption || '').slice(0, 22));
+                return `<button type="button" class="story-item" onclick="openStoryViewer('${cover}', '${name}')">
+                    <img src="${cover}" alt="story ${name}">
+                    <b>${name}${cap ? `<br><span style=\"font-size:10px;font-weight:500;\">${cap}</span>` : ''}</b>
+                </button>`;
+            }).join('');
+        }, () => {
+            container.innerHTML = '';
+        });
+}
 
 async function syncUserAvatarInAllComments(userEmail, oldName, newName, newAvatar) {
     const normalizedEmail = (userEmail || '').toLowerCase();
@@ -3166,6 +3418,14 @@ async function addComment(postId) {
             })
         });
         input.value = ""; 
+
+        const postSnap = await postRef.get();
+        const postData = postSnap.exists ? (postSnap.data() || {}) : {};
+        const ownerEmail = (postData.email || '').toLowerCase();
+        const currentEmail = (currentUser?.email || '').toLowerCase();
+        if (ownerEmail && ownerEmail !== currentEmail) {
+            await createNotification(ownerEmail, 'comment', `${userName} đã bình luận vào bài viết của bạn`, `profile.html?id=${encodeURIComponent(ownerEmail)}&post=${postId}`);
+        }
     } catch (error) {
         console.error("Lỗi khi gửi bình luận: ", error);
         alert("Không thể gửi bình luận, vui lòng thử lại!");
@@ -3181,14 +3441,28 @@ function checkCommentEnter(e, postId) {
 
 
 // 3. Hàm Thả Tim/Haha (Cập nhật lên Firebase)
-function handleReact(postId, type) {
+async function handleReact(postId, type) {
     const postRef = db.collection("posts").doc(postId);
     const increment = firebase.firestore.FieldValue.increment(1);
-    
+
     if (type === 'hearts') {
-        postRef.update({ hearts: increment });
+        await postRef.update({ hearts: increment });
     } else {
-        postRef.update({ hahas: increment });
+        await postRef.update({ hahas: increment });
+    }
+
+    try {
+        const me = getCurrentUser();
+        const snap = await postRef.get();
+        const postData = snap.exists ? (snap.data() || {}) : {};
+        const ownerEmail = (postData.email || '').toLowerCase();
+        const myEmail = (me?.email || '').toLowerCase();
+        if (ownerEmail && ownerEmail !== myEmail) {
+            const actorName = me?.name || me?.email || 'Một thành viên';
+            await createNotification(ownerEmail, 'reaction', `${actorName} đã bày tỏ cảm xúc về bài viết của bạn`, `profile.html?id=${encodeURIComponent(ownerEmail)}&post=${postId}`);
+        }
+    } catch (e) {
+        console.warn('Không gửi được thông báo reaction:', e);
     }
 }
 
