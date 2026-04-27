@@ -5,17 +5,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Trang cá nhân</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/glightbox/dist/css/glightbox.min.css">
     <link rel="stylesheet" href="./profile.css">
 </head>
 <body>
     <main class="profile-page">
         <section class="profile-header" id="profileHeader">
+            <a class="back-home-btn" href="./index.html" aria-label="Về trang chính"><i class="fa-solid fa-arrow-left"></i></a>
             <div class="cover-wrap">
                 <img id="profileCover" class="cover-photo" src="https://images.unsplash.com/photo-1517816743773-6e0fd518b4a6?auto=format&fit=crop&w=1280&q=80" alt="Ảnh bìa">
             </div>
             <div class="profile-main">
-                <img id="profileAvatar" class="profile-avatar" src="" alt="Avatar người dùng">
-                <h1 id="profileName">Đang tải...</h1>
+                <div class="avatar-wrap">
+                    <img id="profileAvatar" class="profile-avatar" src="" alt="Avatar người dùng">
+                    <span id="profileOnlineDot" class="profile-online-dot offline"></span>
+                </div>
+                <div class="profile-main-text">
+                    <h1 id="profileName">Đang tải...</h1>
+                    <p id="profileBio" class="profile-bio"></p>
+                </div>
                 <button id="profileActionBtn" class="profile-action-btn">...</button>
             </div>
             <div class="profile-tabs" role="tablist" aria-label="Tab trang cá nhân">
@@ -26,14 +34,57 @@
         </section>
 
         <section class="profile-content">
+            <div id="ownerComposer" class="owner-composer" style="display:none;">
+                <div class="composer-head">
+                    <img id="composerAvatar" class="composer-avatar" src="" alt="avatar">
+                    <textarea id="newPostCaption" placeholder="Bạn đang nghĩ gì?"></textarea>
+                </div>
+                <div class="composer-media-preview" id="composerMediaPreview" style="display:none;"></div>
+                <div class="composer-actions">
+                    <label class="composer-action-btn">
+                        <i class="fa-regular fa-image"></i> Ảnh/video
+                        <input id="newPostImage" type="file" accept="image/*,video/*" hidden>
+                    </label>
+                    <button id="publishPostBtn" type="button" class="composer-publish-btn"><i class="fa-solid fa-paper-plane"></i> Đăng</button>
+                </div>
+            </div>
+
             <div id="tab-posts" class="tab-panel active"></div>
             <div id="tab-photos" class="tab-panel photo-grid"></div>
             <div id="tab-info" class="tab-panel info-grid"></div>
         </section>
     </main>
 
+    <div id="editProfileModal" class="edit-profile-modal" style="display:none;">
+        <div class="edit-profile-content">
+            <button type="button" class="modal-close" id="closeEditModal"><i class="fa-solid fa-xmark"></i></button>
+            <h3>Chỉnh sửa trang cá nhân</h3>
+            <textarea id="editBio" placeholder="Tiểu sử"></textarea>
+            <input id="editPhone" type="tel" placeholder="Số điện thoại">
+            <input id="editBirthYear" type="number" placeholder="Năm sinh" min="1980" max="2035">
+            <input id="editClassRole" type="text" placeholder="Vai trò lớp">
+            <input id="editFacebook" type="url" placeholder="Link Facebook">
+            <input id="editInstagram" type="url" placeholder="Link Instagram">
+            <input id="editTiktok" type="url" placeholder="Link TikTok">
+
+            <div class="upload-row">
+                <label class="upload-card">Đổi avatar
+                    <input id="editAvatarFile" type="file" accept="image/*">
+                </label>
+                <label class="upload-card">Đổi ảnh bìa
+                    <input id="editCoverFile" type="file" accept="image/*">
+                </label>
+            </div>
+            <button id="saveProfileBtn" type="button"><i class="fa-solid fa-floppy-disk"></i> Lưu thay đổi</button>
+        </div>
+    </div>
+
+
+    <input id="commentMediaInput" type="file" accept="image/*" hidden>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-storage.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/glightbox/dist/js/glightbox.min.js"></script>
     <script src="./profile.js"></script>
 </body>
 </html>
