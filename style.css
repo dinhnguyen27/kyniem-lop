@@ -1,3 +1,4 @@
+/* ===== Ghi chú tối ưu hiệu năng (2026-04-27): thêm pause animation khi tab ẩn + fallback bỏ backdrop-filter trên mobile để giảm tải GPU ===== */
 /* ===== Design tokens (Phase 1 refactor) ===== */
 :root {
     --bg: #f8fafc;
@@ -3935,3 +3936,35 @@ body.dark-mode .group-chat-avatar {
 .story-composer-actions{display:flex;justify-content:space-between;gap:8px;margin-top:8px}
 .story-upload-btn{display:inline-flex;align-items:center;gap:6px;border:1px solid #d5ddf0;border-radius:10px;padding:8px 10px;background:#f6f8ff}
 .story-composer-actions button{border:none;background:#2d66f6;color:#fff;border-radius:10px;padding:8px 14px;font-weight:600}
+
+/* ===== Performance tuning: pause hiệu ứng khi tab không hoạt động ===== */
+body.tab-hidden .leaf {
+    display: none !important;
+}
+
+body.tab-hidden #capsule-carousel-3d {
+    animation-play-state: paused !important;
+}
+
+/* ===== Performance tuning mobile: giảm tải GPU bằng cách tắt backdrop-filter nặng ===== */
+@media (max-width: 768px) {
+    .card,
+    .lock-box,
+    .capsule-box,
+    .chat-panel,
+    .memory-map-box,
+    header {
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+        background: rgba(255, 255, 255, 0.95) !important;
+    }
+
+    body.dark-mode .card,
+    body.dark-mode .lock-box,
+    body.dark-mode .capsule-box,
+    body.dark-mode .chat-panel,
+    body.dark-mode .memory-map-box,
+    body.dark-mode header {
+        background: rgba(15, 23, 42, 0.92) !important;
+    }
+}
