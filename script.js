@@ -1,3 +1,4 @@
+// Ghi chú tối ưu hiệu năng (2026-04-27): quản lý listener tập trung, dọn VanillaTilt, quản lý interval và pause animation khi tab ẩn.
 // 1. Cấu hình Firebase
 const firebaseConfig = {
     apiKey: "AIzaSyA1lkOgOfvmM49o4G4B8ZgoMglAPjNdD5w",
@@ -39,6 +40,10 @@ const ONLINE_ACTIVE_WINDOW_MS = 120000;
 const PRIVATE_CHAT_LIMIT = 120;
 const GROUP_CHAT_LIMIT = 180;
 let presenceInterval = null;
+let countdownIntervalId = null;
+let letterCountdownInterval = null;
+const activeListeners = new Map();
+const tiltInstances = [];
 let usersUnsubscribe = null;
 let recentMessagesUnsubscribe = null;
 let chatUnsubscribe = null;
@@ -83,6 +88,50 @@ let pushNudgeTimer = null;
 let notificationCenterUnsubscribe = null;
 let notificationsUnreadCount = 0;
 let storiesUnsubscribe = null;
+
+// === Tối ưu hiệu năng: quản lý listener/interval/tilt tập trung ===
+function setListener(key, unsub) {
+    const oldUnsub = activeListeners.get(key);
+    if (typeof oldUnsub === 'function') {
+        try { oldUnsub(); } catch (_) {}
+    }
+
+    if (typeof unsub === 'function') {
+        activeListeners.set(key, unsub);
+        return;
+    }
+
+    activeListeners.delete(key);
+}
+
+function clearAllListeners() {
+    activeListeners.forEach((unsub) => {
+        if (typeof unsub === 'function') {
+            try { unsub(); } catch (_) {}
+        }
+    });
+    activeListeners.clear();
+
+    // Đồng bộ lại các biến unsubscribe cũ để không đổi hành vi hiện có.
+    usersUnsubscribe = null;
+    recentMessagesUnsubscribe = null;
+    chatUnsubscribe = null;
+    chatConversationUnsubscribe = null;
+    galleryUnsubscribe = null;
+    groupChatUnsubscribe = null;
+    groupTypingUnsubscribe = null;
+    notificationCenterUnsubscribe = null;
+    storiesUnsubscribe = null;
+}
+
+function destroyAllTilts() {
+    while (tiltInstances.length) {
+        const instance = tiltInstances.pop();
+        if (instance && typeof instance.destroy === 'function') {
+            try { instance.destroy(); } catch (_) {}
+        }
+    }
+}
 
 const MESSAGE_COOLDOWN_MS = 1200;
 const TYPING_EXPIRE_MS = 5000;
@@ -1170,14 +1219,10 @@ function closePrivateChat() {
     const panel = document.getElementById('chat-panel');
     panel?.classList.remove('in-conversation');
     selectedChatUser = null;
-    if (chatUnsubscribe) {
-        chatUnsubscribe();
-        chatUnsubscribe = null;
-    }
-    if (chatConversationUnsubscribe) {
-        chatConversationUnsubscribe();
-        chatConversationUnsubscribe = null;
-    }
+    setListener('private_chat_messages', null);
+    setListener('private_chat_conversation', null);
+    chatUnsubscribe = null;
+    chatConversationUnsubscribe = null;
     const box = document.getElementById('chat-messages');
     if (box) box.innerHTML = '';
     clearPrivateReply();
@@ -1253,7 +1298,7 @@ function initRecentMessagesRanking() {
     const me = getCurrentUser();
     if (!me?.email) return;
 
-    if (recentMessagesUnsubscribe) recentMessagesUnsubscribe();
+    setListener('recent_messages_ranking', null);
 
     recentMessagesUnsubscribe = db.collection('private_messages')
         .where('participants', 'array-contains', me.email.toLowerCase())
@@ -1298,6 +1343,7 @@ function initRecentMessagesRanking() {
         }, (error) => {
             console.warn('Không tải được xếp hạng tin nhắn mới nhất:', error);
         });
+    setListener('recent_messages_ranking', recentMessagesUnsubscribe);
 }
 
 function filterChatUsersByKeyword(users) {
@@ -1473,7 +1519,7 @@ function openPrivateChatByEmail(email) {
 function initPrivateChatUsers() {
     initRecentMessagesRanking();
 
-    if (usersUnsubscribe) usersUnsubscribe();
+    setListener('users', null);
     usersUnsubscribe = db.collection('users').onSnapshot((snap) => {
         const users = [];
         snap.forEach((doc) => users.push(doc.data()));
@@ -1486,6 +1532,7 @@ function initPrivateChatUsers() {
         renderChatUsers(users);
         renderMembersDirectory(users);
     });
+    setListener('users', usersUnsubscribe);
 }
 
 function loadPrivateMessages() {
@@ -1495,8 +1542,8 @@ function loadPrivateMessages() {
     const messagesBox = document.getElementById('chat-messages');
     const conversationRef = getPrivateConversationRef(me.email, selectedChatUser.email);
 
-    if (chatUnsubscribe) chatUnsubscribe();
-    if (chatConversationUnsubscribe) chatConversationUnsubscribe();
+    setListener('private_chat_messages', null);
+    setListener('private_chat_conversation', null);
 
     let latestDocs = [];
     let otherReadTs = 0;
@@ -1594,6 +1641,7 @@ function loadPrivateMessages() {
     }, (error) => {
         console.warn('Không tải được trạng thái đã xem của cuộc trò chuyện:', error);
     });
+    setListener('private_chat_conversation', chatConversationUnsubscribe);
 
     chatUnsubscribe = getPrivateMessagesRef(me.email, selectedChatUser.email)
         .orderBy('createdAt', 'desc')
@@ -1608,6 +1656,7 @@ function loadPrivateMessages() {
                 messagesBox.innerHTML = '<p style="color:#d33">Không tải được tin nhắn. Kiểm tra Firestore rules/index.</p>';
             }
         });
+    setListener('private_chat_messages', chatUnsubscribe);
 }
 
 async function sendPrivateMessage(extra = {}) {
@@ -1699,14 +1748,10 @@ function initGroupChat() {
     const box = document.getElementById('group-chat-messages');
     if (!box) return;
 
-    if (groupChatUnsubscribe) {
-        groupChatUnsubscribe();
-        groupChatUnsubscribe = null;
-    }
-    if (groupTypingUnsubscribe) {
-        groupTypingUnsubscribe();
-        groupTypingUnsubscribe = null;
-    }
+    setListener('group_chat_messages', null);
+    setListener('group_chat_typing', null);
+    groupChatUnsubscribe = null;
+    groupTypingUnsubscribe = null;
 
     box.innerHTML = '<p style="color:#888">Đang tải chat chung...</p>';
     groupTypingUnsubscribe = db.collection('group_meta').doc('typing').onSnapshot((doc) => {
@@ -1720,6 +1765,7 @@ function initGroupChat() {
             });
         showTypingIndicator('group-typing-indicator', activeTypers.length ? `${activeTypers.slice(0, 2).join(', ')} đang nhập...` : '');
     });
+    setListener('group_chat_typing', groupTypingUnsubscribe);
 
     groupChatUnsubscribe = db.collection('group_messages')
         .orderBy('createdAt', 'desc')
@@ -1849,6 +1895,7 @@ function initGroupChat() {
             console.warn('Không tải được chat nhóm chung:', error);
             box.innerHTML = '<p style="color:#d33">Không tải được chat chung. Kiểm tra Firestore rules/index.</p>';
         });
+    setListener('group_chat_messages', groupChatUnsubscribe);
 }
 
 async function sendGroupMessage(extra = {}) {
@@ -2244,6 +2291,33 @@ async function updatePrivateTypingIndicator(isTyping) {
 
 function switchMainTab(tab = 'feed') {
     currentMainTab = tab;
+    // Tối ưu hiệu năng: chỉ giữ listener cho tab đang cần.
+    if (tab !== 'feed') {
+        setListener('gallery', null);
+        galleryUnsubscribe = null;
+        destroyAllTilts();
+    } else {
+        loadGallery();
+    }
+    if (tab !== 'chat') {
+        setListener('private_chat_messages', null);
+        setListener('private_chat_conversation', null);
+        setListener('group_chat_messages', null);
+        setListener('group_chat_typing', null);
+        chatUnsubscribe = null;
+        chatConversationUnsubscribe = null;
+        groupChatUnsubscribe = null;
+        groupTypingUnsubscribe = null;
+    } else {
+        if (selectedChatUser?.email) loadPrivateMessages();
+        initGroupChat();
+    }
+    if (tab !== 'capsule') {
+        setListener('capsule_messages', null);
+    } else {
+        loadTimeCapsuleMessages();
+    }
+
     document.getElementById('chat-panel')?.classList.remove('show');
     document.getElementById('group-chat-panel')?.classList.remove('show');
     closeChatSelectorModal();
@@ -2687,12 +2761,16 @@ function finishIntroExperience() {
 async function logoutUser() {
     await updateMyPresence().catch(() => {});
     stopPresenceTracking();
-    if (usersUnsubscribe) { usersUnsubscribe(); usersUnsubscribe = null; }
-    if (recentMessagesUnsubscribe) { recentMessagesUnsubscribe(); recentMessagesUnsubscribe = null; }
-    if (chatUnsubscribe) { chatUnsubscribe(); chatUnsubscribe = null; }
-    if (chatConversationUnsubscribe) { chatConversationUnsubscribe(); chatConversationUnsubscribe = null; }
-    if (galleryUnsubscribe) { galleryUnsubscribe(); galleryUnsubscribe = null; }
-    if (groupChatUnsubscribe) { groupChatUnsubscribe(); groupChatUnsubscribe = null; }
+    clearAllListeners();
+    destroyAllTilts();
+    if (countdownIntervalId) {
+        clearInterval(countdownIntervalId);
+        countdownIntervalId = null;
+    }
+    if (letterCountdownInterval) {
+        clearInterval(letterCountdownInterval);
+        letterCountdownInterval = null;
+    }
     const current = getCurrentUser();
     if (current?.email) {
         try {
@@ -2910,10 +2988,10 @@ function loadGallery() {
     const gallery = document.getElementById('galleryGrid');
     if (!gallery) return;
 
-    if (galleryUnsubscribe) {
-        galleryUnsubscribe();
-        galleryUnsubscribe = null;
-    }
+    setListener('gallery', null);
+    galleryUnsubscribe = null;
+    // Dọn sạch toàn bộ instance tilt cũ trước khi render lại để tránh rò rỉ bộ nhớ/sự kiện.
+    destroyAllTilts();
 
     galleryMediaItems = [];
     renderGallerySkeleton();
@@ -2926,6 +3004,7 @@ function loadGallery() {
     galleryUnsubscribe = query.onSnapshot((snapshot) => {
         gallery.classList.remove('gallery-has-status');
         gallery.innerHTML = "";
+        destroyAllTilts();
 
         if (snapshot.empty) {
             renderGalleryEmptyState();
@@ -3032,6 +3111,9 @@ function loadGallery() {
                 gyroscope: true,
                 scale: 1.05
             });
+            if (card.vanillaTilt) {
+                tiltInstances.push(card.vanillaTilt);
+            }
 
             if (pendingScrollPostId && pendingScrollPostId === doc.id) {
                 setTimeout(() => focusGalleryPost(doc.id), 150);
@@ -3041,6 +3123,7 @@ function loadGallery() {
     }, (error) => {
         renderGalleryErrorState(error);
     });
+    setListener('gallery', galleryUnsubscribe);
 }
 
 window.openMemorySpotModal = openMemorySpotModal;
@@ -3185,10 +3268,8 @@ async function markAllNotificationsRead() {
 function initNotificationCenter() {
     const me = getCurrentUser();
     if (!me?.email) return;
-    if (notificationCenterUnsubscribe) {
-        notificationCenterUnsubscribe();
-        notificationCenterUnsubscribe = null;
-    }
+    setListener('notifications', null);
+    notificationCenterUnsubscribe = null;
 
     notificationCenterUnsubscribe = db.collection('notifications')
         .where('targetEmail', '==', me.email.toLowerCase())
@@ -3198,6 +3279,7 @@ function initNotificationCenter() {
             const items = snap.docs.map((doc) => ({ id: doc.id, ...(doc.data() || {}) }));
             renderNotificationCenter(items);
         }, () => {});
+    setListener('notifications', notificationCenterUnsubscribe);
 }
 
 function openStoryComposer() {
@@ -3302,10 +3384,8 @@ function initStoriesStrip() {
         const file = event.target.files?.[0];
         if (file) previewStoryMediaFile(file);
     });
-    if (storiesUnsubscribe) {
-        storiesUnsubscribe();
-        storiesUnsubscribe = null;
-    }
+    setListener('stories', null);
+    storiesUnsubscribe = null;
 
     const container = document.getElementById('story-items');
     if (!container) return;
@@ -3332,6 +3412,7 @@ function initStoriesStrip() {
         }, () => {
             container.innerHTML = '';
         });
+    setListener('stories', storiesUnsubscribe);
 }
 
 async function syncUserAvatarInAllComments(userEmail, oldName, newName, newAvatar) {
@@ -3469,8 +3550,12 @@ async function handleReact(postId, type) {
 // 4. Đồng hồ đếm ngược (Sửa lỗi không chạy)
 function startCountdown() {
     const examDate = new Date("June 11, 2026 00:00:00").getTime();
+    if (countdownIntervalId) {
+        clearInterval(countdownIntervalId);
+        countdownIntervalId = null;
+    }
 
-    const timer = setInterval(function() {
+    countdownIntervalId = setInterval(function() {
         const now = new Date().getTime();
         const distance = examDate - now;
 
@@ -3488,7 +3573,8 @@ function startCountdown() {
         }
 
         if (distance < 0) {
-            clearInterval(timer);
+            clearInterval(countdownIntervalId);
+            countdownIntervalId = null;
             document.getElementById("timer").innerHTML = "CHÚC CẢ LỚP THI TỐT! 🎓";
         }
     }, 1000);
@@ -3969,8 +4055,8 @@ function getFeaturedCarouselLimit() {
 
 function loadTimeCapsuleMessages() {
     const today = new Date().toLocaleDateString('sv-SE');
-
-    db.collection("messages").orderBy("unlockDate", "asc").onSnapshot((snapshot) => {
+setListener('capsule_messages', null);
+    const unsubscribe = db.collection("messages").orderBy("unlockDate", "asc").onSnapshot((snapshot) => {
         const carouselDiv = document.getElementById('capsule-carousel-3d'); // Đảm bảo ID này có trong HTML
         const listDiv = document.getElementById('capsule-messages-list');
         const loadMoreBtn = document.getElementById('btn-load-more');
@@ -4040,6 +4126,7 @@ function loadTimeCapsuleMessages() {
 
         updateLetterCountdowns();
     });
+    setListener('capsule_messages', unsubscribe);
 }
 
 function formatUnlockCountdown(unlockDate) {
@@ -4063,6 +4150,15 @@ function updateLetterCountdowns() {
         if (!unlockDate) return;
         el.innerText = formatUnlockCountdown(unlockDate);
     });
+}
+
+function startLetterCountdownInterval() {
+    if (letterCountdownInterval) {
+        clearInterval(letterCountdownInterval);
+        letterCountdownInterval = null;
+    }
+    updateLetterCountdowns();
+    letterCountdownInterval = setInterval(updateLetterCountdowns, 1000);
 }
 
 // HÀM QUAN TRỌNG: Tạo HTML cho thẻ thư (Dùng chung cho cả 2 phần)
@@ -4333,8 +4429,7 @@ window.addEventListener('DOMContentLoaded', () => {
     setupFirebaseMessaging().catch((error) => {
         console.warn('Bỏ qua khởi tạo FCM:', error);
     });
-    updateLetterCountdowns();
-    setInterval(updateLetterCountdowns, 1000);
+    startLetterCountdownInterval();
 
     initEmojiPicker();
 
@@ -4419,6 +4514,7 @@ window.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('online', updateMyPresence);
     window.addEventListener('offline', updateMyPresence);
     document.addEventListener('visibilitychange', () => {
+        document.body.classList.toggle('tab-hidden', document.hidden);
         const hasSession = !!getCurrentUser();
         if (!hasSession) return;
 
@@ -4432,6 +4528,7 @@ window.addEventListener('DOMContentLoaded', () => {
         stopPresenceTracking();
         pauseMusicForBackground();
     });
+    document.body.classList.toggle('tab-hidden', document.hidden);
 
     window.addEventListener('pagehide', () => {
         stopPresenceTracking();
