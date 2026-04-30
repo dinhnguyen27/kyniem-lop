@@ -1,36 +1,18 @@
 // Ghi chú tối ưu hiệu năng (2026-04-27): quản lý listener tập trung, dọn VanillaTilt, quản lý interval và pause animation khi tab ẩn.
-// 1. Cấu hình Firebase
-const firebaseConfig = {
-    apiKey: "AIzaSyA1lkOgOfvmM49o4G4B8ZgoMglAPjNdD5w",
-    authDomain: "kyniemlop-d3404.firebaseapp.com",
-    projectId: "kyniemlop-d3404",
-    storageBucket: "kyniemlop-d3404.firebasestorage.app",
-    messagingSenderId: "824232517330",
-    appId: "1:824232517330:web:acf65afe55dac4d38b970b",
-    measurementId: "G-XG46M01K89"
-};
-
-// Khởi tạo Firebase
-if (!firebase.apps.length) {
-    firebase.initializeApp(firebaseConfig);
-}
-const db = firebase.firestore();
-const storage = firebase.storage ? firebase.storage() : null;
-
-
-const ACCOUNTS_KEY = 'class_accounts';
-const SESSION_KEY = 'class_current_user';
+const { auth, db, storage } = window.firebaseServices;
 const UNLOCK_NOTIFY_KEY = 'class_capsule_notified_unlocks';
 const CHAT_READ_KEY = 'class_chat_read_state';
 const GROUP_CHAT_READ_KEY = 'class_group_chat_last_read';
 const GROUP_CHAT_AVATAR_KEY = 'class_group_chat_avatar';
 const THEME_MODE_KEY = 'class_theme_mode';
 const INTRO_SETTINGS_DOC = 'intro';
+const INTRO_SEEN_AT_KEY = 'class_intro_seen_at_by_user_v1';
 const DEFAULT_INTRO_SETTINGS = {
     introEnabled: true,
     introTitle: 'Chào mừng đến với trang kỷ niệm lớp',
     introDescription: 'Nơi lưu giữ hình ảnh, video và những mảnh ghép đẹp nhất của tập thể chúng mình.',
-    introVideoUrl: ''
+    introVideoUrl: '',
+    introRepeatDays: 30
 };
 
 let unlockWatcherInitialized = false;
@@ -78,16 +60,58 @@ let privateTypingUnsubscribe = null;
 let groupTypingUnsubscribe = null;
 let latestPrivateMessages = [];
 let latestGroupMessages = [];
+const commentCooldownByPost = new Map();
+const commentSpamLockUntilByPost = new Map();
+const lastCommentByPost = new Map();
 let galleryMediaItems = [];
+let lightboxActiveItems = [];
+let galleryIntersectionObserver = null;
+let galleryResizeObserver = null;
+let galleryCardQueue = [];
+let galleryVirtualScrollBound = false;
+let galleryVirtualTicking = false;
+const galleryCacheByYear = new Map();
+const GALLERY_CACHE_DB_NAME = 'kyniem_gallery_cache_v1';
+const GALLERY_CACHE_STORE = 'gallery_by_year';
+const GALLERY_MAX_DOM_CARDS = 90;
+const GALLERY_PRUNE_TARGET = 65;
 let currentLightboxIndex = -1;
 let lightboxZoom = 1;
 let lightboxRotation = 0;
 let deferredInstallPrompt = null;
+let pendingSWRegistration = null;
+let swUpdateAvailable = false;
 let groupChatUnreadCount = 0;
 let pushNudgeTimer = null;
 let notificationCenterUnsubscribe = null;
 let notificationsUnreadCount = 0;
 let storiesUnsubscribe = null;
+let hasEnteredMainSite = false;
+let splashBootStartedAt = Date.now();
+let splashHidden = false;
+
+function showBootSplash() {
+    splashBootStartedAt = Date.now();
+    splashHidden = false;
+    const splash = document.getElementById('app-splash-screen');
+    if (!splash) return;
+    splash.classList.remove('hidden');
+}
+
+function hideBootSplash(minDurationMs = 650) {
+    if (splashHidden) return;
+    const splash = document.getElementById('app-splash-screen');
+    if (!splash) {
+        splashHidden = true;
+        return;
+    }
+    const elapsed = Date.now() - splashBootStartedAt;
+    const delay = Math.max(0, minDurationMs - elapsed);
+    setTimeout(() => {
+        splash.classList.add('hidden');
+        splashHidden = true;
+    }, delay);
+}
 
 // === Tối ưu hiệu năng: quản lý listener/interval/tilt tập trung ===
 function setListener(key, unsub) {
@@ -122,6 +146,7 @@ function clearAllListeners() {
     groupTypingUnsubscribe = null;
     notificationCenterUnsubscribe = null;
     storiesUnsubscribe = null;
+    destroyGalleryObservers();
 }
 
 function destroyAllTilts() {
@@ -133,12 +158,156 @@ function destroyAllTilts() {
     }
 }
 
+function destroyGalleryObservers() {
+    if (galleryIntersectionObserver) {
+        try { galleryIntersectionObserver.disconnect(); } catch (_) {}
+        galleryIntersectionObserver = null;
+    }
+    if (galleryResizeObserver) {
+        try { galleryResizeObserver.disconnect(); } catch (_) {}
+        galleryResizeObserver = null;
+    }
+    detachGalleryVirtualization();
+    galleryCardQueue = [];
+}
+
+function handleGalleryVirtualScroll() {
+    if (galleryVirtualTicking) return;
+    galleryVirtualTicking = true;
+    requestAnimationFrame(() => {
+        galleryVirtualTicking = false;
+        pruneOffscreenGalleryCards();
+    });
+}
+
+function attachGalleryVirtualization() {
+    if (galleryVirtualScrollBound) return;
+    window.addEventListener('scroll', handleGalleryVirtualScroll, { passive: true });
+    galleryVirtualScrollBound = true;
+}
+
+function detachGalleryVirtualization() {
+    if (!galleryVirtualScrollBound) return;
+    window.removeEventListener('scroll', handleGalleryVirtualScroll);
+    galleryVirtualScrollBound = false;
+}
+
+function pruneOffscreenGalleryCards() {
+    const gallery = document.getElementById('galleryGrid');
+    if (!gallery) return;
+    const cards = Array.from(gallery.querySelectorAll('.card'));
+    if (cards.length <= GALLERY_MAX_DOM_CARDS) return;
+    const removable = cards.filter((card) => {
+        const rect = card.getBoundingClientRect();
+        return rect.bottom < -900;
+    });
+    const needRemove = Math.max(0, cards.length - GALLERY_PRUNE_TARGET);
+    removable.slice(0, needRemove).forEach((card) => {
+        if (galleryIntersectionObserver) {
+            try { galleryIntersectionObserver.unobserve(card); } catch (_) {}
+        }
+        card.remove();
+    });
+}
+
+function ensureGalleryIntersectionObserver() {
+    if (galleryIntersectionObserver || typeof window.IntersectionObserver === 'undefined') return;
+    galleryIntersectionObserver = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+            if (!entry.isIntersecting) return;
+            const target = entry.target;
+            const deferred = target?.querySelector?.('[data-src]');
+            if (deferred) {
+                deferred.setAttribute('src', deferred.dataset.src || '');
+                deferred.removeAttribute('data-src');
+                if (deferred.tagName === 'VIDEO' && deferred.dataset.poster) {
+                    deferred.setAttribute('poster', deferred.dataset.poster);
+                    deferred.removeAttribute('data-poster');
+                }
+            }
+            galleryIntersectionObserver?.unobserve(target);
+        });
+    }, { rootMargin: '240px 0px', threshold: 0.02 });
+}
+
+function observeGalleryCard(card) {
+    ensureGalleryIntersectionObserver();
+    if (galleryIntersectionObserver) {
+        galleryIntersectionObserver.observe(card);
+        galleryCardQueue.push(card);
+        return;
+    }
+    const deferred = card.querySelector('[data-src]');
+    if (deferred) {
+        deferred.setAttribute('src', deferred.dataset.src || '');
+        deferred.removeAttribute('data-src');
+    }
+}
+
+async function openGalleryCacheDb() {
+    if (typeof window.indexedDB === 'undefined') return null;
+    return new Promise((resolve) => {
+        const req = window.indexedDB.open(GALLERY_CACHE_DB_NAME, 1);
+        req.onupgradeneeded = () => {
+            const db = req.result;
+            if (!db.objectStoreNames.contains(GALLERY_CACHE_STORE)) {
+                db.createObjectStore(GALLERY_CACHE_STORE, { keyPath: 'key' });
+            }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => resolve(null);
+    });
+}
+
+async function readGalleryCacheByYear(yearKey) {
+    const mem = galleryCacheByYear.get(yearKey);
+    if (mem) return mem;
+    const dbConn = await openGalleryCacheDb();
+    if (!dbConn) return null;
+    return new Promise((resolve) => {
+        try {
+            const tx = dbConn.transaction(GALLERY_CACHE_STORE, 'readonly');
+            const store = tx.objectStore(GALLERY_CACHE_STORE);
+            const req = store.get(yearKey);
+            req.onsuccess = () => {
+                const payload = req.result?.payload || null;
+                if (payload) galleryCacheByYear.set(yearKey, payload);
+                resolve(payload);
+            };
+            req.onerror = () => resolve(null);
+            tx.oncomplete = () => dbConn.close();
+        } catch (_) {
+            dbConn.close();
+            resolve(null);
+        }
+    });
+}
+
+async function writeGalleryCacheByYear(yearKey, payload) {
+    galleryCacheByYear.set(yearKey, payload);
+    const dbConn = await openGalleryCacheDb();
+    if (!dbConn) return;
+    try {
+        const tx = dbConn.transaction(GALLERY_CACHE_STORE, 'readwrite');
+        tx.objectStore(GALLERY_CACHE_STORE).put({
+            key: yearKey,
+            payload: { ...payload, savedAt: Date.now() }
+        });
+        tx.oncomplete = () => dbConn.close();
+        tx.onerror = () => dbConn.close();
+    } catch (_) {
+        dbConn.close();
+    }
+}
+
 const MESSAGE_COOLDOWN_MS = 1200;
 const TYPING_EXPIRE_MS = 5000;
 const TRUSTED_LINK_HOSTS = ['youtube.com', 'youtu.be', 'drive.google.com', 'facebook.com', 'fb.com', 'cloudinary.com', 'firebasestorage.googleapis.com'];
 
 
 const CHAT_EMOJIS = ['😀','😁','😂','🤣','😊','😍','🥰','😘','😎','🤩','😢','😭','😡','👍','👏','🙏','🔥','🎉','💖','💬','🌸','🎓','🫶','✨'];
+let currentUserState = null;
+let authStateReady = false;
 
 const MEMORY_SPOTS = [
     {
@@ -347,6 +516,7 @@ const FCM_VAPID_PUBLIC_KEY = 'BFrdIOzjpU5hTbLY7PrS5LBZUZTFobgNH3jXd5CYu1akplI9gj
 
 let messaging = null;
 let swRegistration = null;
+let messagingSdkLoadPromise = null;
 
 let fcmSupportCache = null;
 
@@ -379,8 +549,27 @@ function getPushUnsupportedReason() {
     return 'Thiết bị/trình duyệt chưa hỗ trợ Firebase Cloud Messaging.';
 }
 
+function ensureFirebaseMessagingSdkLoaded() {
+    if (firebase.messaging && firebase.messaging.isSupported) return Promise.resolve(true);
+    if (messagingSdkLoadPromise) return messagingSdkLoadPromise;
+    messagingSdkLoadPromise = new Promise((resolve) => {
+        const script = document.createElement('script');
+        script.src = 'https://www.gstatic.com/firebasejs/8.10.1/firebase-messaging.js';
+        script.async = true;
+        script.onload = () => resolve(!!(firebase.messaging && firebase.messaging.isSupported));
+        script.onerror = () => resolve(false);
+        document.head.appendChild(script);
+    });
+    return messagingSdkLoadPromise;
+}
+
 async function isFCMSupported() {
     if (fcmSupportCache !== null) return fcmSupportCache;
+    const sdkReady = await ensureFirebaseMessagingSdkLoaded();
+    if (!sdkReady) {
+        fcmSupportCache = false;
+        return false;
+    }
 
     if (!firebase.messaging || !firebase.messaging.isSupported) {
         fcmSupportCache = false;
@@ -414,6 +603,33 @@ async function waitForServiceWorkerReady(timeoutMs = 10000) {
     }
 }
 
+function notifyServiceWorkerUpdateReady(registration = null) {
+    if (registration) pendingSWRegistration = registration;
+    if (swUpdateAvailable) return;
+    swUpdateAvailable = true;
+    const updateBtn = document.getElementById('sw-update-btn');
+    if (updateBtn) updateBtn.style.display = 'block';
+    showSystemToast('Có cập nhật mới, nhấn để tải lại phiên bản mới.', { icon: '⬆️', title: 'Cập nhật ứng dụng' });
+}
+
+async function applyServiceWorkerUpdate() {
+    if (!('serviceWorker' in navigator)) return;
+    const registration = pendingSWRegistration || await navigator.serviceWorker.getRegistration().catch(() => null);
+    const waitingWorker = registration?.waiting;
+    if (!waitingWorker) {
+        showSystemToast('Hiện chưa có bản cập nhật mới.', { icon: 'ℹ️', title: 'Không có cập nhật' });
+        return;
+    }
+
+    showSystemToast('Đang áp dụng phiên bản mới...', { icon: '⏳', title: 'Đang cập nhật' });
+    const onControllerChange = () => {
+        navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
+        window.location.reload();
+    };
+    navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
+    waitingWorker.postMessage({ type: 'SKIP_WAITING' });
+}
+
 async function registerMessagingServiceWorker() {
     if (!('serviceWorker' in navigator)) return null;
 
@@ -426,19 +642,10 @@ async function registerMessagingServiceWorker() {
         try {
             const registration = await navigator.serviceWorker.register(swUrl, { scope: basePath });
             const readyRegistration = await waitForServiceWorkerReady();
+            pendingSWRegistration = registration;
 
-            let hasReloaded = false;
-            const reloadOnControllerChange = () => {
-                navigator.serviceWorker.addEventListener('controllerchange', () => {
-                    if (hasReloaded) return;
-                    hasReloaded = true;
-                    window.location.reload();
-                });
-            };
-
-            if (registration.waiting) {
-                reloadOnControllerChange();
-                registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+            if (registration.waiting && navigator.serviceWorker.controller) {
+                notifyServiceWorkerUpdateReady(registration);
             }
 
             registration.addEventListener('updatefound', () => {
@@ -446,8 +653,7 @@ async function registerMessagingServiceWorker() {
                 if (!worker) return;
                 worker.addEventListener('statechange', () => {
                     if (worker.state === 'installed' && navigator.serviceWorker.controller) {
-                        reloadOnControllerChange();
-                        worker.postMessage({ type: 'SKIP_WAITING' });
+                        notifyServiceWorkerUpdateReady(registration);
                     }
                 });
             });
@@ -468,6 +674,7 @@ async function registerMessagingServiceWorker() {
 }
 
 async function setupFirebaseMessaging() {
+    await ensureFirebaseMessagingSdkLoaded();
     if (!(await isFCMSupported())) return;
     if (messaging) return;
 
@@ -671,14 +878,14 @@ function buildPushErrorMessage(error) {
 async function enablePushNotifications(options = {}) {
     const silent = !!options.silent;
     if (!(await isFCMSupported())) {
-        if (!silent) alert(getPushUnsupportedReason());
+        if (!silent) showSystemToast(getPushUnsupportedReason(), { icon: '⚠️', title: 'Không hỗ trợ thông báo' });
         return;
     }
 
     await setupFirebaseMessaging();
 
     if (!swRegistration) {
-        if (!silent) alert(`Không đăng ký được Service Worker cho FCM. Hãy kiểm tra file firebase-messaging-sw.js có tồn tại ở ${getSiteBasePath()}firebase-messaging-sw.js`);
+        if (!silent) showSystemToast(`Không đăng ký được Service Worker cho FCM. Hãy kiểm tra file firebase-messaging-sw.js có tồn tại ở ${getSiteBasePath()}firebase-messaging-sw.js`, { icon: '⚠️', title: 'Lỗi Service Worker' });
         return;
     }
 
@@ -686,7 +893,7 @@ async function enablePushNotifications(options = {}) {
         if ('Notification' in window && Notification.permission !== 'granted') {
             const permission = await Notification.requestPermission();
             if (permission !== 'granted') {
-                if (!silent) alert('Bạn cần cho phép thông báo để nhận tin khi không mở tab web.');
+                if (!silent) showSystemToast('Bạn cần cho phép thông báo để nhận tin khi không mở tab web.', { icon: '🔔', title: 'Cần cấp quyền thông báo' });
                 updatePushButtonState(false);
                 return;
             }
@@ -694,7 +901,7 @@ async function enablePushNotifications(options = {}) {
 
         const token = await getFcmTokenWithFallback();
         if (!token) {
-            if (!silent) alert('Chưa lấy được FCM token. Vui lòng thử lại.');
+            if (!silent) showSystemToast('Chưa lấy được FCM token. Vui lòng thử lại.', { icon: '⚠️', title: 'Lỗi token thông báo' });
             return;
         }
 
@@ -704,7 +911,7 @@ async function enablePushNotifications(options = {}) {
         showSystemToast('Đã bật thông báo thông minh qua FCM.');
     } catch (error) {
         console.error('Bật thông báo đẩy thất bại:', error);
-        if (!silent) alert(buildPushErrorMessage(error));
+        if (!silent) showSystemToast(buildPushErrorMessage(error), { icon: '⚠️', title: 'Không bật được thông báo' });
     }
 }
 
@@ -775,13 +982,18 @@ function schedulePushPermissionNudge(delayMs = 25000) {
     pushNudgeTimer = setTimeout(() => ensurePushPermissionNudge(), Math.max(5000, Number(delayMs || 0)));
 }
 
-function ensurePushPermissionNudge() {
+async function ensurePushPermissionNudge() {
     const user = getCurrentUser();
     if (!user?.email) return;
     if (!('Notification' in window)) return;
     if (Notification.permission === 'granted') return;
 
-    const shouldOpen = confirm('Để không bỏ lỡ tin nhắn/thông báo mới, bạn nên bật thông báo ngay bây giờ. Bật luôn chứ?');
+    const shouldOpen = await showConfirmModal({
+        title: 'Bật thông báo',
+        message: 'Để không bỏ lỡ tin nhắn/thông báo mới, bạn nên bật thông báo ngay bây giờ. Bật luôn chứ?',
+        okText: 'Bật ngay',
+        cancelText: 'Để sau'
+    });
     if (shouldOpen) {
         enablePushNotifications().finally(() => {
             if (Notification.permission !== 'granted') {
@@ -817,16 +1029,193 @@ function normalizeUserAvatar(user) {
     return { ...user, avatar: user.avatar || buildAvatarUrl(user.name) };
 }
 
-function getSavedAccounts() {
-    return JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || '[]');
-}
-
-function saveAccounts(accounts) {
-    localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
-}
-
 function getCurrentUser() {
-    return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
+    return currentUserState ? { ...currentUserState } : null;
+}
+
+function setCurrentUser(user) {
+    currentUserState = user ? normalizeUserAvatar(user) : null;
+}
+
+async function getUserProfileByEmail(email = '') {
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    if (!normalizedEmail) return null;
+    const snap = await db.collection('users').where('email', '==', normalizedEmail).limit(1).get();
+    if (snap.empty) return null;
+    return snap.docs[0].data() || null;
+}
+
+async function cleanupLegacyPasswordField(email = '') {
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    if (!normalizedEmail) return;
+    try {
+        const snap = await db.collection('users').where('email', '==', normalizedEmail).limit(1).get();
+        if (snap.empty) return;
+        const doc = snap.docs[0];
+        if (typeof doc.data()?.password === 'undefined') return;
+        await doc.ref.update({
+            password: firebase.firestore.FieldValue.delete()
+        });
+    } catch (error) {
+        console.warn('Không thể dọn trường password cũ:', error);
+    }
+}
+
+async function migrateLegacyUserPasswords(batchSize = 200) {
+    const size = Math.max(20, Number(batchSize || 200));
+    let migrated = 0;
+    let scanned = 0;
+    let lastDoc = null;
+
+    while (true) {
+        let query = db.collection('users').orderBy('email').limit(size);
+        if (lastDoc) query = query.startAfter(lastDoc);
+        const snap = await query.get();
+        if (snap.empty) break;
+
+        const batch = db.batch();
+        let hasWrite = false;
+
+        snap.docs.forEach((doc) => {
+            scanned += 1;
+            const data = doc.data() || {};
+            if (typeof data.password !== 'undefined') {
+                batch.update(doc.ref, { password: firebase.firestore.FieldValue.delete() });
+                migrated += 1;
+                hasWrite = true;
+            }
+        });
+
+        if (hasWrite) {
+            await batch.commit();
+        }
+
+        lastDoc = snap.docs[snap.docs.length - 1];
+        if (snap.size < size) break;
+    }
+
+    const result = { scanned, migrated };
+    console.info('Migration result:', result);
+    return result;
+}
+
+function mapFirebaseAuthError(error) {
+    const code = String(error?.code || '');
+    if (code === 'auth/email-already-in-use') return 'Email này đã được đăng ký trước đó.';
+    if (code === 'auth/invalid-email') return 'Email chưa đúng định dạng.';
+    if (code === 'auth/weak-password') return 'Mật khẩu cần ít nhất 6 ký tự.';
+    if (code === 'auth/missing-password') return 'Vui lòng nhập mật khẩu.';
+    if (code === 'auth/missing-email') return 'Vui lòng nhập email.';
+    if (code === 'auth/user-disabled') return 'Tài khoản này đã bị vô hiệu hóa.';
+    if (code === 'auth/user-not-found' || code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
+        return 'Sai email hoặc mật khẩu. Vui lòng thử lại.';
+    }
+    if (code === 'auth/requires-recent-login') {
+        return 'Vui lòng xác thực lại bằng mật khẩu hiện tại trước khi đổi mật khẩu.';
+    }
+    if (code === 'auth/network-request-failed') return 'Mất kết nối mạng. Vui lòng thử lại.';
+    if (code === 'auth/operation-not-allowed') return 'Chức năng xác thực này chưa được bật trên Firebase.';
+    if (code === 'auth/invalid-action-code') return 'Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn.';
+    if (code === 'auth/expired-action-code') return 'Liên kết đặt lại mật khẩu đã hết hạn.';
+    if (code === 'auth/too-many-requests') return 'Bạn thử đăng nhập quá nhiều lần. Vui lòng đợi ít phút.';
+    return 'Không thể xác thực tài khoản lúc này. Vui lòng thử lại.';
+}
+
+function openForgotPasswordDialog() {
+    const modal = document.getElementById('forgot-password-modal');
+    if (!modal) return;
+    modal.style.display = 'flex';
+    const emailInput = document.getElementById('forgot-password-email');
+    if (emailInput) {
+        emailInput.value = String(document.getElementById('login-identifier')?.value || '').trim();
+        emailInput.focus();
+    }
+    syncOverlayUIState();
+}
+
+function closeForgotPasswordDialog() {
+    const modal = document.getElementById('forgot-password-modal');
+    if (!modal) return;
+    modal.style.display = 'none';
+    syncOverlayUIState();
+}
+
+async function submitForgotPassword() {
+    const email = String(document.getElementById('forgot-password-email')?.value || '').trim().toLowerCase();
+    if (!email) {
+        showSystemToast('Vui lòng nhập email để đặt lại mật khẩu.', { icon: '⚠️', title: 'Thiếu thông tin' });
+        return;
+    }
+
+    try {
+        await auth.sendPasswordResetEmail(email);
+        closeForgotPasswordDialog();
+        showSystemToast('Đã gửi email đặt lại mật khẩu. Hãy kiểm tra hộp thư của bạn.', { icon: '📧', title: 'Gửi thành công' });
+    } catch (error) {
+        console.error('Không gửi được email reset mật khẩu:', error);
+        showSystemToast(mapFirebaseAuthError(error), { icon: '⚠️', title: 'Đặt lại mật khẩu thất bại' });
+    }
+}
+
+function openChangePasswordDialog() {
+    const me = auth.currentUser;
+    if (!me?.email) {
+        showSystemToast('Bạn cần đăng nhập trước khi đổi mật khẩu.', { icon: '🔒', title: 'Chưa đăng nhập' });
+        return;
+    }
+    const modal = document.getElementById('change-password-modal');
+    if (!modal) return;
+    ['change-password-old', 'change-password-new', 'change-password-confirm'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+    modal.style.display = 'flex';
+    document.getElementById('change-password-old')?.focus();
+    closeNavMenuModal();
+    syncOverlayUIState();
+}
+
+function closeChangePasswordDialog() {
+    const modal = document.getElementById('change-password-modal');
+    if (!modal) return;
+    modal.style.display = 'none';
+    syncOverlayUIState();
+}
+
+async function submitChangePassword() {
+    const me = auth.currentUser;
+    if (!me?.email) {
+        showSystemToast('Phiên đăng nhập đã hết. Vui lòng đăng nhập lại.', { icon: '⚠️', title: 'Không thể đổi mật khẩu' });
+        return;
+    }
+
+    const oldPassword = String(document.getElementById('change-password-old')?.value || '');
+    const newPassword = String(document.getElementById('change-password-new')?.value || '');
+    const confirmPassword = String(document.getElementById('change-password-confirm')?.value || '');
+
+    if (!oldPassword || !newPassword || !confirmPassword) {
+        showSystemToast('Vui lòng nhập đầy đủ mật khẩu cũ, mật khẩu mới và xác nhận.', { icon: '⚠️', title: 'Thiếu thông tin' });
+        return;
+    }
+    if (newPassword.length < 6) {
+        showSystemToast('Mật khẩu mới cần ít nhất 6 ký tự.', { icon: '⚠️', title: 'Mật khẩu chưa hợp lệ' });
+        return;
+    }
+    if (newPassword !== confirmPassword) {
+        showSystemToast('Xác nhận mật khẩu mới chưa khớp.', { icon: '⚠️', title: 'Mật khẩu không khớp' });
+        return;
+    }
+
+    try {
+        const credential = firebase.auth.EmailAuthProvider.credential(me.email, oldPassword);
+        await me.reauthenticateWithCredential(credential);
+        await me.updatePassword(newPassword);
+        closeChangePasswordDialog();
+        showSystemToast('Đổi mật khẩu thành công.', { icon: '✅', title: 'Thành công' });
+    } catch (error) {
+        console.error('Không đổi được mật khẩu:', error);
+        showSystemToast(mapFirebaseAuthError(error), { icon: '⚠️', title: 'Đổi mật khẩu thất bại' });
+    }
 }
 
 function buildMemoryPopupHtml(spot) {
@@ -1047,6 +1436,123 @@ function showSystemToast(message, options = {}) {
     setTimeout(() => toast.classList.remove('show'), 5200);
 }
 
+function setButtonLoading(button, loading, loadingText = 'Đang gửi...') {
+    if (!button) return;
+    if (loading) {
+        if (!button.dataset.originalText) {
+            button.dataset.originalText = button.innerHTML;
+        }
+        button.disabled = true;
+        button.classList.add('btn-loading');
+        button.textContent = loadingText;
+        return;
+    }
+    button.disabled = false;
+    button.classList.remove('btn-loading');
+    if (button.dataset.originalText) {
+        button.innerHTML = button.dataset.originalText;
+        delete button.dataset.originalText;
+    }
+}
+
+function setNetworkOfflineBanner(offline) {
+    const banner = document.getElementById('network-offline-banner');
+    if (!banner) return;
+    banner.style.display = offline ? 'block' : 'none';
+}
+
+function showConfirmModal({
+    title = 'Xác nhận',
+    message = 'Bạn có chắc chắn muốn tiếp tục?',
+    okText = 'Đồng ý',
+    cancelText = 'Hủy'
+} = {}) {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('confirm-modal');
+        const titleEl = document.getElementById('confirm-modal-title');
+        const messageEl = document.getElementById('confirm-modal-message');
+        const okBtn = document.getElementById('confirm-modal-ok-btn');
+        const cancelBtn = document.getElementById('confirm-modal-cancel-btn');
+        if (!modal || !titleEl || !messageEl || !okBtn || !cancelBtn) {
+            resolve(window.confirm(message));
+            return;
+        }
+
+        titleEl.textContent = title;
+        messageEl.textContent = message;
+        okBtn.textContent = okText;
+        cancelBtn.textContent = cancelText;
+        modal.style.display = 'flex';
+        syncOverlayUIState();
+
+        const cleanup = () => {
+            okBtn.removeEventListener('click', onOk);
+            cancelBtn.removeEventListener('click', onCancel);
+            modal.removeEventListener('click', onBackdrop);
+            modal.style.display = 'none';
+            syncOverlayUIState();
+        };
+        const onOk = () => {
+            cleanup();
+            resolve(true);
+        };
+        const onCancel = () => {
+            cleanup();
+            resolve(false);
+        };
+        const onBackdrop = (event) => {
+            if (event.target !== modal) return;
+            onCancel();
+        };
+
+        okBtn.addEventListener('click', onOk);
+        cancelBtn.addEventListener('click', onCancel);
+        modal.addEventListener('click', onBackdrop);
+    });
+}
+
+function refreshDataAfterReconnect() {
+    if (currentMainTab === 'feed') loadGallery(true);
+    if (currentMainTab === 'capsule') loadTimeCapsuleMessages();
+    if (isPrivateChatOpen() && selectedChatUser?.email) loadPrivateMessages();
+    if (isGroupChatOpen()) initGroupChat();
+}
+
+function nowMs() {
+    return Date.now();
+}
+
+function canSendComment(postId, text = '') {
+    const key = String(postId || '');
+    if (!key) return { ok: false, message: 'Không xác định được bài viết.' };
+    const now = nowMs();
+    const lockUntil = Number(commentSpamLockUntilByPost.get(key) || 0);
+    if (lockUntil > now) {
+        const left = Math.ceil((lockUntil - now) / 1000);
+        return { ok: false, message: `Bạn đang bị giới hạn bình luận do spam. Vui lòng thử lại sau ${left}s.` };
+    }
+    const lastAt = Number(commentCooldownByPost.get(key) || 0);
+    if (now - lastAt < 5000) {
+        const left = Math.ceil((5000 - (now - lastAt)) / 1000);
+        return { ok: false, message: `Bạn bình luận quá nhanh. Vui lòng chờ ${left}s.` };
+    }
+    const normalized = String(text || '').trim().toLowerCase();
+    const prev = lastCommentByPost.get(key);
+    if (prev && prev.text === normalized && (now - prev.at) < 15000) {
+        const lockedTo = now + 60000;
+        commentSpamLockUntilByPost.set(key, lockedTo);
+        return { ok: false, message: 'Phát hiện nội dung lặp lại liên tiếp. Bạn bị khóa bình luận 1 phút.' };
+    }
+    return { ok: true };
+}
+
+function trackCommentSent(postId, text = '') {
+    const key = String(postId || '');
+    const now = nowMs();
+    commentCooldownByPost.set(key, now);
+    lastCommentByPost.set(key, { text: String(text || '').trim().toLowerCase(), at: now });
+}
+
 function notifyUnlockedMessages(allMessages, today) {
     const unlockedMessages = allMessages.filter((m) => today >= m.unlockDate);
 
@@ -1177,6 +1683,7 @@ function toggleChatPanel() {
     const panel = document.getElementById('chat-panel');
     panel?.classList.toggle('show');
     if (!panel?.classList.contains('show')) {
+        teardownChatRealtimeListeners();
         switchMainTab(currentMainTab || 'feed');
     } else {
         closeChatSelectorModal();
@@ -1201,6 +1708,7 @@ function toggleGroupChatPanel() {
         document.querySelectorAll('.bottom-nav-item').forEach((btn) => btn.classList.remove('active'));
         document.querySelector('.bottom-nav-item[data-tab="chat"]')?.classList.add('active');
     } else {
+        teardownChatRealtimeListeners();
         switchMainTab(currentMainTab || 'feed');
     }
     if (panel?.classList.contains('show')) {
@@ -1212,6 +1720,7 @@ function toggleGroupChatPanel() {
 
 function closeGroupChatPanelToSelector() {
     document.getElementById('group-chat-panel')?.classList.remove('show');
+    teardownChatRealtimeListeners();
     openChatSelectorFromTab();
 }
 
@@ -1219,10 +1728,7 @@ function closePrivateChat() {
     const panel = document.getElementById('chat-panel');
     panel?.classList.remove('in-conversation');
     selectedChatUser = null;
-    setListener('private_chat_messages', null);
-    setListener('private_chat_conversation', null);
-    chatUnsubscribe = null;
-    chatConversationUnsubscribe = null;
+    teardownChatRealtimeListeners();
     const box = document.getElementById('chat-messages');
     if (box) box.innerHTML = '';
     clearPrivateReply();
@@ -1236,6 +1742,25 @@ function closePrivateChat() {
     document.querySelectorAll('.bottom-nav-item').forEach((btn) => btn.classList.remove('active'));
     document.querySelector('.bottom-nav-item[data-tab="chat"]')?.classList.add('active');
     syncOverlayUIState();
+}
+
+function isPrivateChatOpen() {
+    return !!document.getElementById('chat-panel')?.classList.contains('show');
+}
+
+function isGroupChatOpen() {
+    return !!document.getElementById('group-chat-panel')?.classList.contains('show');
+}
+
+function teardownChatRealtimeListeners() {
+    setListener('private_chat_messages', null);
+    setListener('private_chat_conversation', null);
+    setListener('group_chat_messages', null);
+    setListener('group_chat_typing', null);
+    chatUnsubscribe = null;
+    chatConversationUnsubscribe = null;
+    groupChatUnsubscribe = null;
+    groupTypingUnsubscribe = null;
 }
 
 function saveChatReadState() {
@@ -1399,6 +1924,40 @@ function setupMobileChatKeyboardBehavior() {
     chatInput.addEventListener('blur', resetPanelPosition);
 }
 
+function setupViewportKeyboardGuard() {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+
+    const applyKeyboardState = () => {
+        const keyboardHeight = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
+        const opened = keyboardHeight > 90;
+        document.body.classList.toggle('keyboard-open', opened);
+        document.body.style.setProperty('--keyboard-offset', opened ? `${keyboardHeight}px` : '0px');
+    };
+
+    viewport.addEventListener('resize', applyKeyboardState);
+    viewport.addEventListener('scroll', applyKeyboardState);
+    window.addEventListener('focusin', applyKeyboardState);
+    window.addEventListener('focusout', () => setTimeout(applyKeyboardState, 80));
+    applyKeyboardState();
+}
+
+function initAOSWhenIdle() {
+    const boot = () => {
+        if (!window.AOS || typeof window.AOS.init !== 'function') return;
+        window.AOS.init({
+            duration: 800,
+            once: true,
+            offset: 40
+        });
+    };
+    if ('requestIdleCallback' in window) {
+        window.requestIdleCallback(boot, { timeout: 1200 });
+    } else {
+        setTimeout(boot, 700);
+    }
+}
+
 function renderChatUsers(users) {
     const list = document.getElementById('chat-users');
     const me = getCurrentUser();
@@ -1474,6 +2033,8 @@ function openPrivateChatWithUser(user) {
     const panel = document.getElementById('chat-panel');
     panel?.classList.add('show');
     panel?.classList.add('in-conversation');
+    document.getElementById('group-chat-panel')?.classList.remove('show');
+    teardownChatRealtimeListeners();
     document.getElementById('emoji-picker')?.classList.remove('show');
     updatePrivateChatHeader();
     markChatAsRead(selectedChatUser.email);
@@ -1537,7 +2098,7 @@ function initPrivateChatUsers() {
 
 function loadPrivateMessages() {
     const me = getCurrentUser();
-    if (!selectedChatUser || !me?.email) return;
+    if (!selectedChatUser || !me?.email || !isPrivateChatOpen()) return;
 
     const messagesBox = document.getElementById('chat-messages');
     const conversationRef = getPrivateConversationRef(me.email, selectedChatUser.email);
@@ -1581,7 +2142,10 @@ function loadPrivateMessages() {
 
         visibleDocs.forEach((data) => {
             const isMe = (data.senderEmail || '').toLowerCase() === me.email.toLowerCase();
-            const safeText = formatChatBodyHtml(data.text || '');
+            const isRevoked = !!data.revoked;
+            const safeText = isRevoked
+                ? '<em style="opacity:.85;">Tin nhắn đã được thu hồi</em>'
+                : formatChatBodyHtml(data.text || '');
             const senderName = escapeHtml(data.senderName || (isMe ? (me.name || 'Bạn') : (selectedChatUser?.name || 'Bạn ấy')));
             const timeText = formatChatTime(data.createdAt);
             const ts = Number(data.createdAt || 0);
@@ -1595,7 +2159,7 @@ function loadPrivateMessages() {
             if (!isMe && ts > latestIncomingTs) latestIncomingTs = ts;
             if (isMe && ts > latestOutgoingTs) latestOutgoingTs = ts;
             const replySnippet = renderReplySnippet(data.replyTo);
-            const imageHtml = data.imageUrl ? `<img class="chat-image" src="${escapeHtml(data.imageUrl)}" alt="chat-image" onclick="openLightbox('${escapeHtml(data.imageUrl)}', false)">` : '';
+            const imageHtml = (!isRevoked && data.imageUrl) ? `<img class="chat-image" src="${escapeHtml(data.imageUrl)}" alt="chat-image" onclick="openLightbox('${escapeHtml(data.imageUrl)}', false)">` : '';
             const otherAvatar = escapeHtml(selectedChatUser?.avatar || buildAvatarUrl(selectedChatUser?.name || 'Bạn ấy'));
             html += `<div class="chat-row ${isMe ? 'me' : 'other'}">
                 ${isMe ? '' : `<img class="chat-peer-avatar" src="${otherAvatar}" alt="avatar ${senderName}" loading="lazy" decoding="async">`}
@@ -1604,6 +2168,7 @@ function loadPrivateMessages() {
                     <span class="meta">${senderName} • ${timeText}</span>
                     <div class="chat-message-actions">
                         <button class="chat-message-action-btn" title="Trả lời" onclick="replyToPrivateMessage('${data.id}')"><i class="fa-solid fa-reply"></i></button>
+                        ${isMe && !isRevoked ? `<button class="chat-message-action-btn" title="Thu hồi" onclick="revokePrivateMessage('${data.id}')"><i class="fa-solid fa-rotate-left"></i></button>` : ''}
                         <button class="chat-message-action-btn" title="${data.pinned ? 'Bỏ ghim' : 'Ghim'}" onclick="togglePinPrivateMessage('${data.id}', ${data.pinned ? 'true' : 'false'})"><i class="fa-solid fa-thumbtack"></i></button>
                     </div>
                 </div>
@@ -1662,6 +2227,7 @@ function loadPrivateMessages() {
 async function sendPrivateMessage(extra = {}) {
     const me = getCurrentUser();
     const input = document.getElementById('chat-input');
+    const sendBtn = document.querySelector('#chat-panel .chat-conversation-view .chat-send-btn');
     const text = input?.value.trim() || '';
     const imageUrl = extra?.imageUrl || '';
     if (!me?.email || !selectedChatUser?.email || (!text && !imageUrl)) return;
@@ -1669,10 +2235,11 @@ async function sendPrivateMessage(extra = {}) {
         return showSystemToast('Bạn gửi hơi nhanh, chờ 1 giây nhé.', { icon: '⏱️', title: 'Chống spam' });
     }
     if (hasUntrustedLink(text)) {
-        return alert('Tin nhắn có link lạ. Hiện chỉ cho phép một số link tin cậy.');
+        return showSystemToast('Tin nhắn có link lạ. Hiện chỉ cho phép một số link tin cậy.', { icon: '⚠️', title: 'Link không hợp lệ' });
     }
 
     try {
+        setButtonLoading(sendBtn, true, 'Đang gửi...');
         const now = Date.now();
         lastPrivateMessageSentAt = now;
         const conversationRef = getPrivateConversationRef(me.email, selectedChatUser.email);
@@ -1739,14 +2306,16 @@ async function sendPrivateMessage(extra = {}) {
         document.getElementById('emoji-picker')?.classList.remove('show');
     } catch (e) {
         console.error('Không gửi được tin nhắn riêng:', e);
-        alert('Gửi tin nhắn thất bại. Vui lòng thử lại.');
+        showSystemToast('Gửi tin nhắn thất bại. Vui lòng thử lại.', { icon: '⚠️', title: 'Lỗi gửi tin nhắn' });
+    } finally {
+        setButtonLoading(sendBtn, false);
     }
 }
 
 
 function initGroupChat() {
     const box = document.getElementById('group-chat-messages');
-    if (!box) return;
+    if (!box || !isGroupChatOpen()) return;
 
     setListener('group_chat_messages', null);
     setListener('group_chat_typing', null);
@@ -1806,8 +2375,11 @@ function initGroupChat() {
             const html = filteredDocs.map((doc) => {
                 const data = doc.data() || {};
                 const isMe = (data.senderEmail || '').toLowerCase() === (me?.email || '').toLowerCase();
+                const isRevoked = !!data.revoked;
                 const senderName = escapeHtml(data.senderName || data.senderEmail || 'Thành viên');
-                const text = formatChatBodyHtml(data.text || '');
+                const text = isRevoked
+                    ? '<em style="opacity:.85;">Tin nhắn đã được thu hồi</em>'
+                    : formatChatBodyHtml(data.text || '');
                 const time = escapeHtml(formatChatTime(data.createdAt));
                 const ts = Number(data.createdAt || 0);
                 const dateKey = getChatDateKey(ts);
@@ -1823,7 +2395,7 @@ function initGroupChat() {
                 const senderAvatar = escapeHtml(data.senderAvatar || buildAvatarUrl(data.senderName || data.senderEmail || "Thành viên"));
                 const bubbleClass = isMe ? 'me' : 'other';
                 const replySnippet = renderReplySnippet(data.replyTo);
-                const imageHtml = data.imageUrl ? `<img class="chat-image" src="${escapeHtml(data.imageUrl)}" alt="chat-image" onclick="openLightbox('${escapeHtml(data.imageUrl)}', false)">` : '';
+                const imageHtml = (!isRevoked && data.imageUrl) ? `<img class="chat-image" src="${escapeHtml(data.imageUrl)}" alt="chat-image" onclick="openLightbox('${escapeHtml(data.imageUrl)}', false)">` : '';
                 block += `<div class="group-chat-message ${bubbleClass}">
                     ${isMe ? '' : `<img class="group-chat-avatar" src="${senderAvatar}" alt="avatar ${senderName}" loading="lazy" decoding="async">`}
                     <div class="chat-bubble ${bubbleClass}">
@@ -1831,6 +2403,7 @@ function initGroupChat() {
                         <span class="meta">${senderName} • ${time}</span>
                         <div class="chat-message-actions">
                             <button class="chat-message-action-btn" title="Trả lời" onclick="replyToGroupMessage('${doc.id}')"><i class="fa-solid fa-reply"></i></button>
+                            ${isMe && !isRevoked ? `<button class="chat-message-action-btn" title="Thu hồi" onclick="revokeGroupMessage('${doc.id}')"><i class="fa-solid fa-rotate-left"></i></button>` : ''}
                             <button class="chat-message-action-btn" title="${data.pinned ? 'Bỏ ghim' : 'Ghim'}" onclick="togglePinGroupMessage('${doc.id}', ${data.pinned ? 'true' : 'false'})"><i class="fa-solid fa-thumbtack"></i></button>
                         </div>
                     </div>
@@ -1901,6 +2474,7 @@ function initGroupChat() {
 async function sendGroupMessage(extra = {}) {
     const me = getCurrentUser();
     const input = document.getElementById('group-chat-input');
+    const sendBtn = document.querySelector('#group-chat-panel .chat-send-btn');
     const text = input?.value.trim() || '';
     const imageUrl = extra?.imageUrl || '';
     if (!me?.email || (!text && !imageUrl) || !input) return;
@@ -1908,10 +2482,11 @@ async function sendGroupMessage(extra = {}) {
         return showSystemToast('Bạn gửi hơi nhanh, chờ 1 giây nhé.', { icon: '⏱️', title: 'Chống spam' });
     }
     if (hasUntrustedLink(text)) {
-        return alert('Tin nhắn có link lạ. Hiện chỉ cho phép một số link tin cậy.');
+        return showSystemToast('Tin nhắn có link lạ. Hiện chỉ cho phép một số link tin cậy.', { icon: '⚠️', title: 'Link không hợp lệ' });
     }
 
     try {
+        setButtonLoading(sendBtn, true, 'Đang gửi...');
         const senderName = me.name || me.email;
 
         const sentAt = Date.now();
@@ -1949,7 +2524,9 @@ async function sendGroupMessage(extra = {}) {
         document.getElementById('group-emoji-picker')?.classList.remove('show');
     } catch (error) {
         console.error('Không gửi được tin nhắn nhóm chung:', error);
-        alert('Gửi chat chung thất bại. Vui lòng thử lại.');
+        showSystemToast('Gửi chat chung thất bại. Vui lòng thử lại.', { icon: '⚠️', title: 'Lỗi gửi tin nhắn nhóm' });
+    } finally {
+        setButtonLoading(sendBtn, false);
     }
 }
 
@@ -2120,49 +2697,42 @@ async function registerAccount() {
     if (password.length < 6) return showAuthMessage('Mật khẩu cần ít nhất 6 ký tự.');
 
     try {
-        const [emailSnap, phoneSnap] = await Promise.all([
-            db.collection('users').where('email', '==', email).limit(1).get(),
-            db.collection('users').where('phone', '==', phone).limit(1).get()
-        ]);
-
-        if (!emailSnap.empty || !phoneSnap.empty) {
+        const phoneSnap = await db.collection('users').where('phone', '==', phone).limit(1).get();
+        if (!phoneSnap.empty) {
             return showAuthMessage('Email hoặc số điện thoại đã được đăng ký.');
         }
 
-        const avatar = buildAvatarUrl(name);    
-
-        await db.collection('users').add({
+        const cred = await auth.createUserWithEmailAndPassword(email, password);
+        const avatar = buildAvatarUrl(name);
+        await db.collection('users').doc(cred.user.uid).set({
+            uid: cred.user.uid,
             name,
             phone,
             email,
-            avatar, 
+            avatar,
             nickname: '',
             classRole: '',
             birthYear: null,
-            password,
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-
-        const localAccounts = getSavedAccounts();
-        if (!localAccounts.some((a) => a.email === email)) {
-            localAccounts.push({ name, phone, email, avatar, nickname: '', classRole: '', birthYear: null, password });
-            saveAccounts(localAccounts);
-        }
+        }, { merge: true });
+        await cleanupLegacyPasswordField(email);
+        setCurrentUser({ name, phone, email, avatar, nickname: '', classRole: '', birthYear: null });
 
         document.getElementById('register-name').value = '';
         document.getElementById('register-phone').value = '';
         document.getElementById('register-email').value = '';
         document.getElementById('register-password').value = '';
 
-        showAuthMessage('Tạo tài khoản thành công và đã lưu Firebase! Mời bạn đăng nhập.', false);
-        switchAuthTab('login');
+        showAuthMessage('Tạo tài khoản thành công!', false);
     } catch (error) {
         console.error('Lỗi đăng ký Firebase:', error);
-        showAuthMessage('Không thể đăng ký lên Firebase. Vui lòng kiểm tra quyền Firestore hoặc thử lại.');
+        showAuthMessage(mapFirebaseAuthError(error));
     }
 }
 
 function enterMainSite() {
+    if (hasEnteredMainSite) return;
+    hasEnteredMainSite = true;
     document.getElementById('password-screen').style.display = 'none';
     document.getElementById('main-content').style.display = 'block';
 
@@ -2219,6 +2789,33 @@ async function togglePinGroupMessage(messageId, pinned) {
         .catch((error) => console.warn('Không thể cập nhật ghim nhóm:', error));
 }
 
+async function revokeGroupMessage(messageId) {
+    const me = getCurrentUser();
+    if (!me?.email || !messageId) return;
+    if (!(await showConfirmModal('Thu hồi tin nhắn nhóm này?'))) return;
+    await db.collection('group_messages').doc(messageId).set({
+        revoked: true,
+        text: '',
+        imageUrl: '',
+        revokedAt: Date.now(),
+        revokedBy: me.email.toLowerCase()
+    }, { merge: true }).catch((error) => {
+        console.warn('Không thể thu hồi tin nhắn nhóm:', error);
+        showSystemToast('Thu hồi tin nhắn nhóm thất bại.', { icon: '⚠️', title: 'Lỗi thu hồi' });
+    });
+}
+
+async function uploadImageToStorage(file, folder = 'chat_images') {
+    if (!storage) throw new Error('Storage chưa sẵn sàng.');
+    if (!file) throw new Error('Thiếu file ảnh cần tải lên.');
+    const ext = (String(file.name || '').split('.').pop() || 'jpg').toLowerCase();
+    const safeExt = ext.replace(/[^a-z0-9]/gi, '') || 'jpg';
+    const fileName = `${Date.now()}_${Math.random().toString(36).slice(2)}.${safeExt}`;
+    const ref = storage.ref(`${folder}/${fileName}`);
+    await ref.put(file);
+    return ref.getDownloadURL();
+}
+
 function triggerGroupImagePicker() {
     document.getElementById('group-chat-image-input')?.click();
 }
@@ -2227,10 +2824,11 @@ async function handleGroupImagePicked(event) {
     const file = event?.target?.files?.[0];
     if (!file) return;
     try {
-        const dataUrl = await resizeImageToDataUrl(file, 1280, 0.78);
-        await sendGroupMessage({ imageUrl: dataUrl });
+        const imageUrl = await uploadImageToStorage(file, 'chat_images/group');
+        await sendGroupMessage({ imageUrl });
     } catch (error) {
-        alert('Không xử lý được ảnh chat nhóm.');
+        console.error('Upload ảnh nhóm thất bại:', error);
+        showSystemToast('Không tải được ảnh chat nhóm lên Storage.', { icon: '⚠️', title: 'Upload thất bại' });
     } finally {
         event.target.value = '';
     }
@@ -2260,6 +2858,22 @@ async function togglePinPrivateMessage(messageId, pinned) {
         .catch((error) => console.warn('Không thể cập nhật ghim tin nhắn:', error));
 }
 
+async function revokePrivateMessage(messageId) {
+    const me = getCurrentUser();
+    if (!me?.email || !selectedChatUser?.email || !messageId) return;
+    if (!(await showConfirmModal('Thu hồi tin nhắn riêng này?'))) return;
+    await getPrivateMessagesRef(me.email, selectedChatUser.email).doc(messageId).set({
+        revoked: true,
+        text: '',
+        imageUrl: '',
+        revokedAt: Date.now(),
+        revokedBy: me.email.toLowerCase()
+    }, { merge: true }).catch((error) => {
+        console.warn('Không thể thu hồi tin nhắn riêng:', error);
+        showSystemToast('Thu hồi tin nhắn riêng thất bại.', { icon: '⚠️', title: 'Lỗi thu hồi' });
+    });
+}
+
 function triggerPrivateImagePicker() {
     document.getElementById('private-chat-image-input')?.click();
 }
@@ -2268,10 +2882,11 @@ async function handlePrivateImagePicked(event) {
     const file = event?.target?.files?.[0];
     if (!file) return;
     try {
-        const dataUrl = await resizeImageToDataUrl(file, 1280, 0.78);
-        await sendPrivateMessage({ imageUrl: dataUrl });
+        const imageUrl = await uploadImageToStorage(file, 'chat_images/private');
+        await sendPrivateMessage({ imageUrl });
     } catch (error) {
-        alert('Không xử lý được ảnh chat. Vui lòng thử ảnh khác.');
+        console.error('Upload ảnh chat riêng thất bại:', error);
+        showSystemToast('Không tải được ảnh chat lên Storage. Vui lòng thử lại.', { icon: '⚠️', title: 'Upload thất bại' });
     } finally {
         event.target.value = '';
     }
@@ -2296,21 +2911,15 @@ function switchMainTab(tab = 'feed') {
         setListener('gallery', null);
         galleryUnsubscribe = null;
         destroyAllTilts();
+        destroyGalleryObservers();
     } else {
         loadGallery();
     }
     if (tab !== 'chat') {
-        setListener('private_chat_messages', null);
-        setListener('private_chat_conversation', null);
-        setListener('group_chat_messages', null);
-        setListener('group_chat_typing', null);
-        chatUnsubscribe = null;
-        chatConversationUnsubscribe = null;
-        groupChatUnsubscribe = null;
-        groupTypingUnsubscribe = null;
+        teardownChatRealtimeListeners();
     } else {
-        if (selectedChatUser?.email) loadPrivateMessages();
-        initGroupChat();
+        if (isPrivateChatOpen() && selectedChatUser?.email) loadPrivateMessages();
+        if (isGroupChatOpen()) initGroupChat();
     }
     if (tab !== 'capsule') {
         setListener('capsule_messages', null);
@@ -2363,7 +2972,7 @@ function openProfileByEmail(email) {
 function openOwnProfilePage() {
     const me = getCurrentUser();
     if (!me?.email) {
-        alert('Bạn cần đăng nhập để xem trang cá nhân.');
+        showSystemToast('Bạn cần đăng nhập để xem trang cá nhân.', { icon: '🔒', title: 'Chưa đăng nhập' });
         return;
     }
     openProfileByEmail(me.email);
@@ -2451,7 +3060,7 @@ function toggleMuteGroupChat() {
     const muted = localStorage.getItem(key) === '1';
     localStorage.setItem(key, muted ? '0' : '1');
     closeGroupActionSheet();
-    alert(muted ? 'Đã bật lại thông báo nhóm.' : 'Đã tắt thông báo nhóm.');
+    showSystemToast(muted ? 'Đã bật lại thông báo nhóm.' : 'Đã tắt thông báo nhóm.', { icon: '🔔', title: 'Thông báo nhóm' });
 }
 
 function viewChatTargetProfile() {
@@ -2467,7 +3076,7 @@ function toggleChatThemeAccent() {
 
 function showSharedMediaStub() {
     closeChatActionSheet();
-    alert('Tính năng Ảnh & File đã gửi sẽ hiển thị ở bản cập nhật kế tiếp.');
+    showSystemToast('Tính năng Ảnh & File đã gửi sẽ hiển thị ở bản cập nhật kế tiếp.', { icon: 'ℹ️', title: 'Sắp ra mắt' });
 }
 
 function toggleMutePrivateChat() {
@@ -2476,7 +3085,7 @@ function toggleMutePrivateChat() {
     const currentlyMuted = localStorage.getItem(key) === '1';
     localStorage.setItem(key, currentlyMuted ? '0' : '1');
     closeChatActionSheet();
-    alert(currentlyMuted ? 'Đã bật lại thông báo cuộc trò chuyện này.' : 'Đã tắt thông báo cuộc trò chuyện này.');
+    showSystemToast(currentlyMuted ? 'Đã bật lại thông báo cuộc trò chuyện này.' : 'Đã tắt thông báo cuộc trò chuyện này.', { icon: '🔔', title: 'Thông báo chat riêng' });
 }
 
 function closeChatSelectorModal() {
@@ -2499,6 +3108,7 @@ function openChatFromTab() {
     panel?.classList.remove('in-conversation');
     selectedChatUser = null;
     updatePrivateChatHeader();
+    teardownChatRealtimeListeners();
     syncOverlayUIState();
 }
 
@@ -2511,6 +3121,8 @@ function openGroupChatFromTab() {
     closeTopQuickMenu();
     document.getElementById('chat-panel')?.classList.remove('show');
     document.getElementById('group-chat-panel')?.classList.add('show');
+    teardownChatRealtimeListeners();
+    initGroupChat();
     markGroupChatAsRead();
     syncOverlayUIState();
 }
@@ -2539,6 +3151,37 @@ function renderReplySnippet(replyTo) {
     const sender = escapeHtml(replyTo.senderName || 'Thành viên');
     const msg = escapeHtml(String(replyTo.text || '').slice(0, 90));
     return `<div class="chat-reply-snippet">↪ ${sender}: ${msg}</div>`;
+}
+
+function getIntroSeenMap() {
+    try {
+        const raw = localStorage.getItem(INTRO_SEEN_AT_KEY) || '{}';
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch (_) {
+        return {};
+    }
+}
+
+function setIntroSeenAtForUser(email, seenAt = Date.now()) {
+    const key = String(email || '').toLowerCase();
+    if (!key) return;
+    const map = getIntroSeenMap();
+    map[key] = Number(seenAt) || Date.now();
+    localStorage.setItem(INTRO_SEEN_AT_KEY, JSON.stringify(map));
+}
+
+function shouldShowIntroForUser(email, settings) {
+    if (!settings?.introEnabled) return false;
+    const key = String(email || '').toLowerCase();
+    if (!key) return true;
+    const map = getIntroSeenMap();
+    const lastSeenAt = Number(map[key] || 0);
+    if (!lastSeenAt) return true;
+
+    const repeatDays = Math.max(1, Number(settings.introRepeatDays || DEFAULT_INTRO_SETTINGS.introRepeatDays));
+    const repeatMs = repeatDays * 24 * 60 * 60 * 1000;
+    return (Date.now() - lastSeenAt) >= repeatMs;
 }
 
 function renderReplyPreview(elId, replyPayload) {
@@ -2599,7 +3242,8 @@ async function fetchIntroSettings() {
             introEnabled: data.introEnabled !== false,
             introTitle: String(data.introTitle || DEFAULT_INTRO_SETTINGS.introTitle),
             introDescription: String(data.introDescription || DEFAULT_INTRO_SETTINGS.introDescription),
-            introVideoUrl: String(data.introVideoUrl || '')
+            introVideoUrl: String(data.introVideoUrl || ''),
+            introRepeatDays: Number(data.introRepeatDays || DEFAULT_INTRO_SETTINGS.introRepeatDays)
         };
     } catch (error) {
         console.warn('Không tải được intro settings, dùng mặc định:', error);
@@ -2632,7 +3276,9 @@ function resolveIntroMedia(rawUrl = '') {
 
 async function startIntroExperienceAfterLogin() {
     const settings = await fetchIntroSettings();
-    if (settings.introEnabled === false) {
+    const me = getCurrentUser();
+    const meEmail = String(me?.email || '').toLowerCase();
+    if (!shouldShowIntroForUser(meEmail, settings)) {
         enterMainSite();
         return;
     }
@@ -2654,6 +3300,7 @@ async function startIntroExperienceAfterLogin() {
         return;
     }
 
+    hasEnteredMainSite = false;
     if (passwordScreen) passwordScreen.style.display = 'none';
     if (mainContent) mainContent.style.display = 'none';
     if (musicContainer) musicContainer.style.display = 'none';
@@ -2672,32 +3319,16 @@ async function startIntroExperienceAfterLogin() {
     });
 
     const media = resolveIntroMedia(settings.introVideoUrl);
-    if (media.kind === 'video') {
-        if (skeletonEl) skeletonEl.style.display = 'block';
-        videoEl.preload = 'auto';
-        videoEl.onloadeddata = () => {
-            if (skeletonEl) skeletonEl.style.display = 'none';
-        };
-        videoEl.onerror = () => {
-            if (skeletonEl) skeletonEl.style.display = 'none';
-        };
-        videoEl.src = media.url;
-        videoEl.load();
-        videoEl.style.display = 'block';
-        driveEl.src = '';
-        driveEl.style.display = 'none';
-        emptyNoteEl.style.display = 'none';
-    } else if (media.kind === 'drive') {
-        if (skeletonEl) skeletonEl.style.display = 'block';
-        driveEl.onload = () => {
-            if (skeletonEl) skeletonEl.style.display = 'none';
-        };
+    if (media.kind === 'video' || media.kind === 'drive') {
+        // Chỉ hiển thị placeholder, chưa nạp media ngay để tránh kéo LCP trên mobile.
+        if (skeletonEl) skeletonEl.style.display = 'none';
         videoEl.pause();
         videoEl.removeAttribute('src');
+        videoEl.preload = 'none';
         videoEl.load();
-        videoEl.style.display = 'none';
-        driveEl.src = media.url;
-        driveEl.style.display = 'block';
+        videoEl.style.display = media.kind === 'video' ? 'block' : 'none';
+        driveEl.src = '';
+        driveEl.style.display = media.kind === 'drive' ? 'block' : 'none';
         emptyNoteEl.style.display = 'none';
     } else {
         if (skeletonEl) skeletonEl.style.display = 'none';
@@ -2719,6 +3350,8 @@ function goToIntroVideoStep() {
     const videoCard = introOverlay?.querySelector('[data-step="video"]');
     const videoEl = document.getElementById('intro-video-player');
     const driveEl = document.getElementById('intro-drive-player');
+    const skeletonEl = document.getElementById('intro-media-skeleton');
+    const emptyNoteEl = document.getElementById('intro-video-empty-note');
     if (!introOverlay || !introCard || !videoCard) return;
 
     introCard.classList.remove('is-active');
@@ -2727,6 +3360,45 @@ function goToIntroVideoStep() {
         videoCard.style.display = 'block';
         requestAnimationFrame(() => videoCard.classList.add('is-active'));
     }, 180);
+
+    const media = resolveIntroMedia(window.__introSettings?.introVideoUrl || '');
+    if (media.kind === 'video' && videoEl) {
+        if (skeletonEl) skeletonEl.style.display = 'block';
+        videoEl.preload = 'metadata';
+        videoEl.onloadeddata = () => {
+            if (skeletonEl) skeletonEl.style.display = 'none';
+        };
+        videoEl.onerror = () => {
+            if (skeletonEl) skeletonEl.style.display = 'none';
+        };
+        if (videoEl.src !== media.url) {
+            videoEl.src = media.url;
+            videoEl.load();
+        }
+        videoEl.style.display = 'block';
+        if (driveEl) {
+            driveEl.src = '';
+            driveEl.style.display = 'none';
+        }
+        if (emptyNoteEl) emptyNoteEl.style.display = 'none';
+    } else if (media.kind === 'drive' && driveEl) {
+        if (skeletonEl) skeletonEl.style.display = 'block';
+        driveEl.onload = () => {
+            if (skeletonEl) skeletonEl.style.display = 'none';
+        };
+        driveEl.src = media.url;
+        driveEl.style.display = 'block';
+        if (videoEl) {
+            videoEl.pause();
+            videoEl.removeAttribute('src');
+            videoEl.load();
+            videoEl.style.display = 'none';
+        }
+        if (emptyNoteEl) emptyNoteEl.style.display = 'none';
+    } else if (emptyNoteEl) {
+        if (skeletonEl) skeletonEl.style.display = 'none';
+        emptyNoteEl.style.display = 'block';
+    }
 
     if (videoEl?.src && videoEl.style.display !== 'none') {
         videoEl.currentTime = 0;
@@ -2755,7 +3427,107 @@ function finishIntroExperience() {
         }, 220);
     }
     document.body.style.overflow = '';
+    const me = getCurrentUser();
+    setIntroSeenAtForUser(me?.email || '');
     enterMainSite();
+}
+
+function openDeleteAccountDialog() {
+    const me = getCurrentUser();
+    if (!me?.email) {
+        showSystemToast('Bạn cần đăng nhập để xóa tài khoản.', { icon: '🔒', title: 'Chưa đăng nhập' });
+        return;
+    }
+    const modal = document.getElementById('delete-account-modal');
+    const input = document.getElementById('delete-account-password');
+    if (!modal || !input) return;
+    input.value = '';
+    modal.style.display = 'flex';
+    syncOverlayUIState();
+    setTimeout(() => input.focus(), 50);
+}
+
+function closeDeleteAccountDialog() {
+    const modal = document.getElementById('delete-account-modal');
+    const input = document.getElementById('delete-account-password');
+    if (input) input.value = '';
+    if (modal) modal.style.display = 'none';
+    syncOverlayUIState();
+}
+
+async function deleteDocsByQuery(query, batchSize = 200) {
+    if (!query) return 0;
+    let total = 0;
+    while (true) {
+        const snap = await query.limit(batchSize).get().catch(() => null);
+        if (!snap || snap.empty) break;
+        const batch = db.batch();
+        snap.docs.forEach((doc) => batch.delete(doc.ref));
+        await batch.commit();
+        total += snap.size;
+        if (snap.size < batchSize) break;
+    }
+    return total;
+}
+
+async function deletePostSubcollections(postRef) {
+    const subcollections = ['comments', 'reactions'];
+    for (const name of subcollections) {
+        const subSnap = await postRef.collection(name).limit(400).get().catch(() => null);
+        if (!subSnap || subSnap.empty) continue;
+        const batch = db.batch();
+        subSnap.forEach((doc) => batch.delete(doc.ref));
+        await batch.commit().catch(() => {});
+    }
+}
+
+async function purgeUserRelatedData(userEmail) {
+    const email = String(userEmail || '').toLowerCase();
+    if (!email) return;
+
+    const postSnap = await db.collection('posts').where('email', '==', email).get().catch(() => null);
+    if (postSnap && !postSnap.empty) {
+        for (const postDoc of postSnap.docs) {
+            await deletePostSubcollections(postDoc.ref);
+        }
+        const batch = db.batch();
+        postSnap.forEach((doc) => batch.delete(doc.ref));
+        await batch.commit();
+    }
+
+    await deleteDocsByQuery(db.collection('stories').where('userEmail', '==', email), 150);
+    await deleteDocsByQuery(db.collectionGroup('tin_nhan').where('senderEmail', '==', email), 200);
+    await deleteDocsByQuery(db.collection('notifications').where('targetEmail', '==', email), 200);
+    await deleteDocsByQuery(db.collection('notifications').where('actorEmail', '==', email), 200);
+    await deleteDocsByQuery(db.collection('users').where('email', '==', email), 50);
+}
+
+async function submitDeleteAccount() {
+    const me = getCurrentUser();
+    const authUser = auth.currentUser;
+    const password = (document.getElementById('delete-account-password')?.value || '').trim();
+    if (!me?.email || !authUser) {
+        showSystemToast('Phiên đăng nhập đã hết. Vui lòng đăng nhập lại.', { icon: '⚠️', title: 'Không thể xóa' });
+        closeDeleteAccountDialog();
+        return;
+    }
+    if (!password) {
+        showSystemToast('Vui lòng nhập mật khẩu hiện tại để xác nhận.', { icon: '⚠️', title: 'Thiếu mật khẩu' });
+        return;
+    }
+
+    try {
+        const credential = firebase.auth.EmailAuthProvider.credential(me.email.toLowerCase(), password);
+        await authUser.reauthenticateWithCredential(credential);
+        await purgeUserRelatedData(me.email);
+        await authUser.delete();
+        closeDeleteAccountDialog();
+        showSystemToast('Tài khoản đã được xóa thành công.', { icon: '✅', title: 'Đã xóa tài khoản' });
+        await logoutUser();
+    } catch (error) {
+        console.error('Lỗi xóa tài khoản:', error);
+        showSystemToast(mapFirebaseAuthError(error), { icon: '⚠️', title: 'Không thể xóa tài khoản' });
+    }
 }
 
 async function logoutUser() {
@@ -2780,7 +3552,9 @@ async function logoutUser() {
             }
         } catch (e) {}
     }
-    localStorage.removeItem(SESSION_KEY);
+    await auth.signOut().catch(() => {});
+    hasEnteredMainSite = false;
+    setCurrentUser(null);
     if (pushNudgeTimer) {
         clearTimeout(pushNudgeTimer);
         pushNudgeTimer = null;
@@ -2800,6 +3574,10 @@ async function logoutUser() {
 
 // 2. Hàm Tải Ảnh từ Firebase (Quan trọng nhất)
 let currentYearFilter = 'all';
+const GALLERY_PAGE_SIZE = 10;
+let galleryLastVisibleDoc = null;
+let galleryHasMore = false;
+let isGalleryLoading = false;
 
 // 1. Danh sách nhạc
 const playlist = [
@@ -2955,7 +3733,7 @@ function filterByYear(year) {
             btn.classList.add('active');
         }
     });
-    loadGallery(); // Tải lại ảnh theo năm đã chọn
+    loadGallery(true); // Tải lại ảnh theo năm đã chọn
 }
 
 function renderGalleryStatus(html) {
@@ -2981,149 +3759,267 @@ function renderGalleryErrorState(error) {
 }
 
 function retryGalleryLoad() {
-    loadGallery();
+    loadGallery(true);
 }
 
-function loadGallery() {
+function toggleGalleryLoadMoreButton(visible) {
+    const btn = document.getElementById('gallery-load-more-btn');
+    const spinner = document.getElementById('gallery-load-more-spinner');
+    if (!btn) return;
+    btn.style.display = visible ? 'inline-flex' : 'none';
+    btn.disabled = false;
+    btn.textContent = 'Xem thêm';
+    if (spinner) spinner.style.display = 'none';
+}
+
+function showGalleryLoadMoreExhausted() {
+    const btn = document.getElementById('gallery-load-more-btn');
+    const spinner = document.getElementById('gallery-load-more-spinner');
+    if (!btn) return;
+    btn.style.display = 'inline-flex';
+    btn.disabled = true;
+    btn.textContent = 'Đã hết';
+    btn.classList.add('btn-loading');
+    if (spinner) spinner.style.display = 'none';
+}
+
+function serializeGalleryDoc(docLike) {
+    const raw = typeof docLike?.data === 'function' ? (docLike.data() || {}) : (docLike?.data || {});
+    return {
+        id: String(docLike?.id || ''),
+        data: {
+            ...raw,
+            createdAt: Number(raw.createdAt || 0),
+            takenAt: Number(raw.takenAt || 0)
+        }
+    };
+}
+
+function createGalleryCard(docLike) {
+    const data = typeof docLike?.data === 'function' ? (docLike.data() || {}) : (docLike?.data || {});
+    const docId = docLike?.id || '';
+    const fileUrl = data.url || "";
+    const thumbnailUrl = data.thumbnailUrl || fileUrl;
+    const isVideo = fileUrl.toLowerCase().includes('.mp4')
+        || fileUrl.toLowerCase().includes('video/upload')
+        || fileUrl.toLowerCase().includes('cloudinary');
+
+    galleryMediaItems.push({
+        url: fileUrl,
+        isVideo,
+        postId: docId
+    });
+
+    let mediaHtml = "";
+    if (isVideo) {
+        const posterUrl = fileUrl.replace("/upload/", "/upload/so_0/").replace(/\.[^/.]+$/, ".jpg");
+        mediaHtml = `
+        <div class="video-preview-container" onclick="openLightboxByIndex(-1, this)">
+            <video 
+                data-src="${fileUrl}" 
+                data-poster="${posterUrl}"
+                preload="metadata" 
+                playsinline
+                muted
+                loop>
+                style="width:100%; height:250px; object-fit: cover; border-radius: 8px;">
+            </video>
+            <div class="play-button-overlay">▶</div>
+        </div>`;
+    } else {
+        mediaHtml = `<img data-src="${thumbnailUrl}" data-full-src="${fileUrl}" onclick="openLightboxByIndex(-1, this)" loading="lazy" decoding="async" fetchpriority="low" alt="Kỷ niệm">`;
+    }
+
+    const heartUsers = data.heartUsers || [];
+    const hahaUsers = data.hahaUsers || [];
+    const comments = data.comments || [];
+    const postOwner = escapeHtml(data.user || data.userName || data.email || 'Thành viên lớp');
+    const takenAt = Number(data.takenAt || parseFirestoreTimestampToMillis(data.createdAt));
+    const takenAtLabel = takenAt ? new Date(takenAt).toLocaleDateString('vi-VN') : '';
+    const locationLabel = escapeHtml(data.locationName || data.locationAddress || 'Chưa gắn địa điểm');
+    const tagLabel = escapeHtml(`${data.year || ''}${data.semester ? ` • ${data.semester}` : ''}`.trim() || 'Kỷ niệm lớp');
+    const commentHtml = comments.map(c => {
+        const avatar = c.avatar || buildAvatarUrl(c.user || 'Thành viên');
+        return `
+            <div class="each-comment">
+                <img class="comment-avatar" src="${avatar}" alt="avatar">
+                <div class="comment-text"><b>${c.user}:</b> ${c.text}</div>
+            </div>
+        `;
+    }).join('');
+
+    const heartListHtml = heartUsers.length > 0 ? heartUsers.join("<br>") : "Chưa có ai thả tim";
+    const hahaListHtml = hahaUsers.length > 0 ? hahaUsers.join("<br>") : "Chưa có ai haha";
+
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.setAttribute('data-aos', 'fade-up');
+    card.setAttribute('data-post-id', docId);
+    card.id = `post-${docId}`;
+    card.innerHTML = `
+        <div class="media-wrap">
+            ${mediaHtml}
+        </div>
+        <div class="comment-area">
+            <p class="post-meta">👤 ${postOwner} • 🗓️ ${takenAtLabel || 'Không rõ ngày'} • 📍 ${locationLabel}</p>
+            <p class="post-tag">#${tagLabel.replace(/\s+/g, '-')}</p>
+            <div class="reactions">
+                <button class="react-btn" onclick="handleReact('${docId}', 'hearts', this)">
+                    ❤️ <span class="count">${heartUsers.length}</span>
+                    <span class="tooltip-list">${heartListHtml}</span>
+                </button>
+                <button class="react-btn" onclick="handleReact('${docId}', 'hahas', this)">
+                    😆 <span class="count">${hahaUsers.length}</span>
+                    <span class="tooltip-list">${hahaListHtml}</span>
+                </button>
+            </div>
+            <p><strong>Kỷ niệm:</strong> ${data.caption || "Không có chú thích"}</p>
+
+            <div class="comment-list" id="comments-${docId}">
+                ${commentHtml}
+            </div>
+
+            <div class="comment-input-group">
+                <input type="text" placeholder="Viết bình luận..." id="input-${docId}" onkeypress="checkCommentEnter(event, '${docId}')">
+                <button onclick="addComment('${docId}')">Gửi</button>
+            </div>
+        </div>
+    `;
+
+    const shouldEnableTilt = window.matchMedia?.('(pointer:fine)')?.matches;
+    if (shouldEnableTilt && window.VanillaTilt) {
+        VanillaTilt.init(card, {
+            max: 15,
+            speed: 400,
+            glare: true,
+            "max-glare": 0.5,
+            gyroscope: true,
+            scale: 1.05
+        });
+        if (card.vanillaTilt) {
+            tiltInstances.push(card.vanillaTilt);
+        }
+    }
+
+    if (pendingScrollPostId && pendingScrollPostId === docId) {
+        setTimeout(() => focusGalleryPost(docId), 150);
+        pendingScrollPostId = null;
+    }
+
+    observeGalleryCard(card);
+    return card;
+}
+
+async function loadGallery(reset = true) {
     const gallery = document.getElementById('galleryGrid');
     if (!gallery) return;
 
     setListener('gallery', null);
     galleryUnsubscribe = null;
-    // Dọn sạch toàn bộ instance tilt cũ trước khi render lại để tránh rò rỉ bộ nhớ/sự kiện.
-    destroyAllTilts();
+    const loadMoreBtn = document.getElementById('gallery-load-more-btn');
+    const loadMoreSpinner = document.getElementById('gallery-load-more-spinner');
+    const yearCacheKey = String(currentYearFilter || 'all');
+    if (isGalleryLoading) return;
+    isGalleryLoading = true;
+    if (!reset && loadMoreBtn) {
+        loadMoreBtn.disabled = true;
+        loadMoreBtn.textContent = 'Đang tải';
+        if (loadMoreSpinner) loadMoreSpinner.style.display = 'inline-block';
+    }
 
-    galleryMediaItems = [];
-    renderGallerySkeleton();
+    if (reset) {
+        galleryLastVisibleDoc = null;
+        galleryHasMore = false;
+        galleryMediaItems = [];
+        renderGallerySkeleton();
+        toggleGalleryLoadMoreButton(false);
+        destroyGalleryObservers();
+        attachGalleryVirtualization();
+        const cachedPayload = await readGalleryCacheByYear(yearCacheKey);
+        if (cachedPayload?.items?.length) {
+            gallery.classList.remove('gallery-has-status');
+            gallery.innerHTML = '';
+            destroyAllTilts();
+            cachedPayload.items.forEach((item) => gallery.appendChild(createGalleryCard(item)));
+            galleryHasMore = !!cachedPayload.hasMore;
+            toggleGalleryLoadMoreButton(galleryHasMore);
+            galleryLastVisibleDoc = cachedPayload.cursorCreatedAt
+                ? { __cachedCursor: true, createdAt: cachedPayload.cursorCreatedAt }
+                : null;
+        }
+    }
+    // Dọn sạch toàn bộ instance tilt cũ trước khi render lại để tránh rò rỉ bộ nhớ/sự kiện.
+    if (reset) destroyAllTilts();
 
     let query = db.collection("posts").orderBy("createdAt", "desc");
     if (currentYearFilter !== 'all') {
         query = query.where("year", "==", currentYearFilter);
     }
+    if (!reset && galleryLastVisibleDoc) {
+        if (galleryLastVisibleDoc.__cachedCursor) {
+            query = query.startAfter(galleryLastVisibleDoc.createdAt);
+        } else {
+            query = query.startAfter(galleryLastVisibleDoc);
+        }
+    }
 
-    galleryUnsubscribe = query.onSnapshot((snapshot) => {
-        gallery.classList.remove('gallery-has-status');
-        gallery.innerHTML = "";
-        destroyAllTilts();
+    try {
+        const snapshot = await query.limit(GALLERY_PAGE_SIZE).get();
+        if (reset) {
+            gallery.classList.remove('gallery-has-status');
+            gallery.innerHTML = "";
+        }
 
-        if (snapshot.empty) {
+        if (snapshot.empty && reset) {
             renderGalleryEmptyState();
+            toggleGalleryLoadMoreButton(false);
             return;
         }
 
+        const freshItems = [];
         snapshot.forEach((doc) => {
-            const data = doc.data();
-            const fileUrl = data.url || "";
-
-            const isVideo = fileUrl.toLowerCase().includes('.mp4')
-                || fileUrl.toLowerCase().includes('video/upload')
-                || fileUrl.toLowerCase().includes('cloudinary');
-
-            const mediaIndex = galleryMediaItems.push({
-                url: fileUrl,
-                isVideo,
-                postId: doc.id
-            }) - 1;
-
-            let mediaHtml = "";
-            if (isVideo) {
-                const posterUrl = fileUrl.replace("/upload/", "/upload/so_0/").replace(/\.[^/.]+$/, ".jpg");
-
-                mediaHtml = `
-                <div class="video-preview-container" onclick="openLightboxByIndex(${mediaIndex})">
-                    <video 
-                        src="${fileUrl}" 
-                        poster="${posterUrl}"
-                        preload="metadata" 
-                        playsinline
-                        muted
-                        loop>
-                        style="width:100%; height:250px; object-fit: cover; border-radius: 8px;">
-                    </video>
-                    <div class="play-button-overlay">▶</div>
-                </div>`;
-            } else {
-                mediaHtml = `<img src="${fileUrl}" onclick="openLightboxByIndex(${mediaIndex})" loading="lazy" alt="Kỷ niệm">`;
-            }
-
-            const heartUsers = data.heartUsers || [];
-            const hahaUsers = data.hahaUsers || [];
-            const comments = data.comments || [];
-            const postOwner = escapeHtml(data.user || data.userName || data.email || 'Thành viên lớp');
-            const takenAt = Number(data.takenAt || parseFirestoreTimestampToMillis(data.createdAt));
-            const takenAtLabel = takenAt ? new Date(takenAt).toLocaleDateString('vi-VN') : '';
-            const locationLabel = escapeHtml(data.locationName || data.locationAddress || 'Chưa gắn địa điểm');
-            const tagLabel = escapeHtml(`${data.year || ''}${data.semester ? ` • ${data.semester}` : ''}`.trim() || 'Kỷ niệm lớp');
-            const commentHtml = comments.map(c => {
-                const avatar = c.avatar || buildAvatarUrl(c.user || 'Thành viên');
-                return `
-                    <div class="each-comment">
-                        <img class="comment-avatar" src="${avatar}" alt="avatar">
-                        <div class="comment-text"><b>${c.user}:</b> ${c.text}</div>
-                    </div>
-                `;
-            }).join('');
-
-            const heartListHtml = heartUsers.length > 0 ? heartUsers.join("<br>") : "Chưa có ai thả tim";
-            const hahaListHtml = hahaUsers.length > 0 ? hahaUsers.join("<br>") : "Chưa có ai haha";
-
-            const card = document.createElement('div');
-            card.className = 'card';
-            card.setAttribute('data-aos', 'fade-up');
-            card.setAttribute('data-post-id', doc.id);
-            card.id = `post-${doc.id}`;
-            card.innerHTML = `
-                <div class="media-wrap">
-                    ${mediaHtml}
-                </div>
-                <div class="comment-area">
-                    <p class="post-meta">👤 ${postOwner} • 🗓️ ${takenAtLabel || 'Không rõ ngày'} • 📍 ${locationLabel}</p>
-                    <p class="post-tag">#${tagLabel.replace(/\s+/g, '-')}</p>
-                    <div class="reactions">
-                        <button class="react-btn" onclick="handleReact('${doc.id}', 'hearts')">
-                            ❤️ <span class="count">${heartUsers.length}</span>
-                            <span class="tooltip-list">${heartListHtml}</span>
-                        </button>
-                        <button class="react-btn" onclick="handleReact('${doc.id}', 'hahas')">
-                            😆 <span class="count">${hahaUsers.length}</span>
-                            <span class="tooltip-list">${hahaListHtml}</span>
-                        </button>
-                    </div>
-                    <p><strong>Kỷ niệm:</strong> ${data.caption || "Không có chú thích"}</p>
-
-                    <div class="comment-list" id="comments-${doc.id}">
-                        ${commentHtml}
-                    </div>
-
-                    <div class="comment-input-group">
-                        <input type="text" placeholder="Viết bình luận..." id="input-${doc.id}" onkeypress="checkCommentEnter(event, '${doc.id}')">
-                        <button onclick="addComment('${doc.id}')">Gửi</button>
-                    </div>
-                </div>
-            `;
-            gallery.appendChild(card);
-
-            VanillaTilt.init(card, {
-                max: 15,
-                speed: 400,
-                glare: true,
-                "max-glare": 0.5,
-                gyroscope: true,
-                scale: 1.05
-            });
-            if (card.vanillaTilt) {
-                tiltInstances.push(card.vanillaTilt);
-            }
-
-            if (pendingScrollPostId && pendingScrollPostId === doc.id) {
-                setTimeout(() => focusGalleryPost(doc.id), 150);
-                pendingScrollPostId = null;
-            }
+            gallery.appendChild(createGalleryCard(doc));
+            freshItems.push(serializeGalleryDoc(doc));
         });
-    }, (error) => {
+        pruneOffscreenGalleryCards();
+
+        galleryLastVisibleDoc = snapshot.docs.length ? snapshot.docs[snapshot.docs.length - 1] : galleryLastVisibleDoc;
+        galleryHasMore = snapshot.docs.length === GALLERY_PAGE_SIZE;
+        if (galleryHasMore) {
+            toggleGalleryLoadMoreButton(true);
+        } else {
+            showGalleryLoadMoreExhausted();
+        }
+        if (reset || snapshot.docs.length) {
+            const previousItems = reset ? [] : ((await readGalleryCacheByYear(yearCacheKey))?.items || []);
+            const items = reset ? freshItems : [...previousItems, ...freshItems];
+            await writeGalleryCacheByYear(yearCacheKey, {
+                items,
+                hasMore: galleryHasMore,
+                cursorCreatedAt: Number(galleryLastVisibleDoc?.data?.()?.createdAt || galleryLastVisibleDoc?.createdAt || 0)
+            });
+        }
+    } catch (error) {
         renderGalleryErrorState(error);
-    });
-    setListener('gallery', galleryUnsubscribe);
+        showSystemToast('Tải thêm gallery thất bại, vui lòng thử lại.', { icon: '⚠️', title: 'Lỗi tải dữ liệu' });
+        if (loadMoreBtn) {
+            loadMoreBtn.style.display = 'inline-flex';
+            loadMoreBtn.disabled = false;
+            loadMoreBtn.textContent = 'Thử lại';
+        }
+    } finally {
+        isGalleryLoading = false;
+        if (loadMoreBtn) {
+            loadMoreBtn.disabled = false;
+            if (galleryHasMore) loadMoreBtn.textContent = 'Xem thêm';
+        }
+        if (loadMoreSpinner) loadMoreSpinner.style.display = 'none';
+    }
+}
+
+function loadMoreGallery() {
+    if (!galleryHasMore || isGalleryLoading) return;
+    loadGallery(false);
 }
 
 window.openMemorySpotModal = openMemorySpotModal;
@@ -3160,6 +4056,8 @@ window.clearPrivateReply = clearPrivateReply;
 window.clearGroupReply = clearGroupReply;
 window.togglePinPrivateMessage = togglePinPrivateMessage;
 window.togglePinGroupMessage = togglePinGroupMessage;
+window.revokePrivateMessage = revokePrivateMessage;
+window.revokeGroupMessage = revokeGroupMessage;
 window.triggerPrivateImagePicker = triggerPrivateImagePicker;
 window.triggerGroupImagePicker = triggerGroupImagePicker;
 window.openLightboxByIndex = openLightboxByIndex;
@@ -3169,7 +4067,18 @@ window.closeLightbox = closeLightbox;
 window.showInstallGuide = showInstallGuide;
 window.toggleTopQuickMenu = toggleTopQuickMenu;
 window.showAccountDataSummary = showAccountDataSummary;
+window.openForgotPasswordDialog = openForgotPasswordDialog;
+window.closeForgotPasswordDialog = closeForgotPasswordDialog;
+window.submitForgotPassword = submitForgotPassword;
+window.openChangePasswordDialog = openChangePasswordDialog;
+window.closeChangePasswordDialog = closeChangePasswordDialog;
+window.submitChangePassword = submitChangePassword;
+window.openDeleteAccountDialog = openDeleteAccountDialog;
+window.closeDeleteAccountDialog = closeDeleteAccountDialog;
+window.submitDeleteAccount = submitDeleteAccount;
 window.retryGalleryLoad = retryGalleryLoad;
+window.loadMoreGallery = loadMoreGallery;
+window.migrateLegacyUserPasswords = migrateLegacyUserPasswords;
 window.toggleNotificationCenter = toggleNotificationCenter;
 window.openNotification = openNotification;
 window.markAllNotificationsRead = markAllNotificationsRead;
@@ -3177,6 +4086,12 @@ window.openStoryComposer = openStoryComposer;
 window.closeStoryComposerModal = closeStoryComposerModal;
 window.submitStoryPost = submitStoryPost;
 window.openStoryViewer = openStoryViewer;
+window.openStoryViewersModal = openStoryViewersModal;
+window.closeStoryViewersModal = closeStoryViewersModal;
+window.deleteStory = deleteStory;
+window.applyServiceWorkerUpdate = applyServiceWorkerUpdate;
+window.triggerInstallPrompt = triggerInstallPrompt;
+window.closeInstallGuide = closeInstallGuide;
 
 
 
@@ -3207,6 +4122,24 @@ async function createNotification(targetEmail, type, message, link = '', meta = 
     }).catch(() => {});
 }
 
+async function updateAppBadge(unreadCount = 0) {
+    const count = Math.max(0, Number(unreadCount) || 0);
+    try {
+        if ('setAppBadge' in navigator) {
+            if (count > 0) {
+                await navigator.setAppBadge(count);
+            } else if ('clearAppBadge' in navigator) {
+                await navigator.clearAppBadge();
+            } else {
+                await navigator.setAppBadge(0);
+            }
+        }
+    } catch (_) {}
+
+    const baseTitle = 'Kỷ Niệm Lớp Chúng Mình';
+    document.title = count > 0 ? `(${count}) ${baseTitle}` : baseTitle;
+}
+
 function renderNotificationCenter(items = []) {
     const list = document.getElementById('notification-list');
     const badge = document.getElementById('notification-badge');
@@ -3215,6 +4148,7 @@ function renderNotificationCenter(items = []) {
     notificationsUnreadCount = items.filter((it) => !it.read).length;
     badge.style.display = notificationsUnreadCount > 0 ? 'grid' : 'none';
     badge.textContent = notificationsUnreadCount > 99 ? '99+' : String(notificationsUnreadCount);
+    updateAppBadge(notificationsUnreadCount);
 
     if (!items.length) {
         list.innerHTML = '<p class="members-empty">Chưa có thông báo mới.</p>';
@@ -3285,7 +4219,7 @@ function initNotificationCenter() {
 function openStoryComposer() {
     const me = getCurrentUser();
     if (!me?.email) {
-        alert('Vui lòng đăng nhập để đăng story.');
+        showSystemToast('Vui lòng đăng nhập để đăng story.', { icon: '🔒', title: 'Chưa đăng nhập' });
         return;
     }
 
@@ -3334,7 +4268,7 @@ async function submitStoryPost() {
     const file = input?.files?.[0] || null;
     const caption = (captionInput?.value || '').trim();
     if (!file) {
-        alert('Bạn cần chọn ảnh hoặc video để đăng story.');
+        showSystemToast('Bạn cần chọn ảnh hoặc video để đăng story.', { icon: '⚠️', title: 'Thiếu dữ liệu' });
         return;
     }
 
@@ -3349,6 +4283,7 @@ async function submitStoryPost() {
             userAvatar: me.avatar || buildAvatarUrl(me.name || me.email),
             mediaUrl,
             caption,
+            viewedBy: [],
             createdAt: now,
             expiresAt: now + (24 * 60 * 60 * 1000)
         });
@@ -3368,15 +4303,71 @@ async function submitStoryPost() {
 
         closeStoryComposerModal();
     } catch (error) {
-        alert('Đăng story thất bại. Vui lòng thử lại.');
+        showSystemToast('Đăng story thất bại. Vui lòng thử lại.', { icon: '⚠️', title: 'Lỗi đăng story' });
     }
 }
 
 
-function openStoryViewer(mediaUrl, ownerName = 'Story') {
+function openStoryViewer(mediaUrl, ownerName = 'Story', storyId = '') {
     if (!mediaUrl) return;
+    markStoryViewed(storyId);
     const isVideo = /\.mp4|\.webm|video/i.test(String(mediaUrl || ''));
     openLightbox(String(mediaUrl || ''), isVideo);
+}
+
+async function markStoryViewed(storyId) {
+    const me = getCurrentUser();
+    if (!storyId || !me?.email) return;
+    await db.collection('stories').doc(storyId).set({
+        viewedBy: firebase.firestore.FieldValue.arrayUnion(me.email.toLowerCase())
+    }, { merge: true }).catch(() => {});
+}
+
+async function openStoryViewersModal(storyId, ownerName = 'Story') {
+    if (!storyId) return;
+    const modal = document.getElementById('story-viewers-modal');
+    const title = document.getElementById('story-viewers-title');
+    const list = document.getElementById('story-viewers-list');
+    if (!modal || !title || !list) return;
+    title.textContent = `Người đã xem story của ${ownerName}`;
+    list.innerHTML = '<p class="members-empty">Đang tải danh sách người xem...</p>';
+    modal.style.display = 'flex';
+    syncOverlayUIState();
+
+    const snap = await db.collection('stories').doc(storyId).get().catch(() => null);
+    const data = snap?.exists ? (snap.data() || {}) : {};
+    const viewers = Array.isArray(data.viewedBy) ? data.viewedBy : [];
+    if (!viewers.length) {
+        list.innerHTML = '<p class="members-empty">Chưa có ai xem story này.</p>';
+        return;
+    }
+    list.innerHTML = viewers.map((email) => `<div class="notification-item"><strong>${escapeHtml(email)}</strong></div>`).join('');
+}
+
+async function deleteStory(storyId) {
+    const me = getCurrentUser();
+    if (!storyId || !me?.email) return;
+    if (!(await showConfirmModal('Xóa story này ngay bây giờ?'))) return;
+    const ref = db.collection('stories').doc(storyId);
+    const snap = await ref.get().catch(() => null);
+    const data = snap?.exists ? (snap.data() || {}) : null;
+    if (!data) return;
+    const ownerEmail = String(data.userEmail || '').toLowerCase();
+    if (ownerEmail !== me.email.toLowerCase()) {
+        showSystemToast('Bạn chỉ có thể xóa story của chính mình.', { icon: '🔒', title: 'Không có quyền' });
+        return;
+    }
+    await ref.delete().catch((error) => {
+        console.warn('Không thể xóa story:', error);
+        showSystemToast('Xóa story thất bại.', { icon: '⚠️', title: 'Lỗi story' });
+    });
+}
+
+function closeStoryViewersModal() {
+    const modal = document.getElementById('story-viewers-modal');
+    if (!modal) return;
+    modal.style.display = 'none';
+    syncOverlayUIState();
 }
 
 function initStoriesStrip() {
@@ -3400,13 +4391,18 @@ function initStoriesStrip() {
                 container.innerHTML = '<div class="story-empty">Chưa có story mới. Hãy tạo story đầu tiên của lớp nhé!</div>';
                 return;
             }
+            const meEmail = (getCurrentUser()?.email || '').toLowerCase();
             container.innerHTML = stories.map((story) => {
                 const cover = escapeHtml(story.mediaUrl || buildAvatarUrl(story.userName || 'Story'));
                 const name = escapeHtml((story.userName || 'Story').slice(0, 12));
                 const cap = escapeHtml((story.caption || '').slice(0, 22));
-                return `<button type="button" class="story-item" onclick="openStoryViewer('${cover}', '${name}')">
-                    <img src="${cover}" alt="story ${name}">
+                const ownerEmail = String(story.userEmail || '').toLowerCase();
+                const viewCount = Array.isArray(story.viewedBy) ? story.viewedBy.length : 0;
+                return `<button type="button" class="story-item" onclick="openStoryViewer('${cover}', '${name}', '${story.id}')">
+                    <img src="${cover}" alt="story ${name}" loading="lazy" decoding="async" fetchpriority="low">
                     <b>${name}${cap ? `<br><span style=\"font-size:10px;font-weight:500;\">${cap}</span>` : ''}</b>
+                    ${ownerEmail === meEmail ? `<span class="story-view-chip" onclick="event.stopPropagation();openStoryViewersModal('${story.id}','${name}')"><i class="fa-regular fa-eye"></i> ${viewCount}</span>` : ''}
+                    ${ownerEmail === meEmail ? `<span class="story-delete-btn" onclick="event.stopPropagation();deleteStory('${story.id}')" title="Xóa story"><i class="fa-solid fa-trash"></i></span>` : ''}
                 </button>`;
             }).join('');
         }, () => {
@@ -3415,87 +4411,37 @@ function initStoriesStrip() {
     setListener('stories', storiesUnsubscribe);
 }
 
-async function syncUserAvatarInAllComments(userEmail, oldName, newName, newAvatar) {
-    const normalizedEmail = (userEmail || '').toLowerCase();
-    if (!normalizedEmail && !oldName && !newName) return;
-
-    try {
-        const postSnap = await db.collection('posts').get();
-        if (postSnap.empty) return;
-
-        const updates = [];
-        postSnap.forEach((doc) => {
-            const data = doc.data();
-            const comments = Array.isArray(data.comments) ? data.comments : [];
-            let changed = false;
-
-            const nextComments = comments.map((comment) => {
-                const commentEmail = (comment?.userEmail || '').toLowerCase();
-                const commentName = comment?.user || '';
-                const isSameUser = (normalizedEmail && commentEmail === normalizedEmail)
-                    || (!!commentName && [oldName, newName].filter(Boolean).includes(commentName));
-
-                if (!isSameUser) return comment;
-
-                changed = true;
-                return {
-                    ...comment,
-                    user: newName || commentName,
-                    userEmail: normalizedEmail || commentEmail,
-                    avatar: newAvatar || comment.avatar || buildAvatarUrl(newName || commentName || 'Thành viên')
-                };
-            });
-
-            if (changed) {
-                updates.push({ docId: doc.id, comments: nextComments });
-            }
-        });
-
-        if (!updates.length) return;
-
-        const chunkSize = 400;
-        for (let i = 0; i < updates.length; i += chunkSize) {
-            const chunk = updates.slice(i, i + chunkSize);
-            const batch = db.batch();
-            chunk.forEach((item) => {
-                batch.update(db.collection('posts').doc(item.docId), { comments: item.comments });
-            });
-            await batch.commit();
-        }
-    } catch (error) {
-        console.warn('Không thể đồng bộ avatar vào bình luận cũ:', error);
-    }
-}
+// Đã bỏ cơ chế syncUserAvatarInAllComments để tránh quét toàn bộ posts.
+// Avatar của comment được render động từ users/allChatUsers khi hiển thị.
 
 function getUserName() {
     const user = getCurrentUser();
     if (user?.name) return user.name;
-
-    const fallbackName = localStorage.getItem('class_user_name');
-    return fallbackName || 'Thành viên ẩn danh';
+    return 'Thành viên ẩn danh';
 }
 
 // Hàm gửi bình luận đã nâng cấp
 async function addComment(postId) {
     const input = document.getElementById(`input-${postId}`);
+    const sendBtn = input?.parentElement?.querySelector('button');
     const text = input.value.trim();
     if (!text) return;
 
     // Lấy tên người dùng trước khi gửi
     const userName = getUserName();
     const currentUser = normalizeUserAvatar(getCurrentUser());
-    const avatar = currentUser?.avatar || buildAvatarUrl(userName);
     const userEmail = (currentUser?.email || '').toLowerCase();
 
     const postRef = db.collection("posts").doc(postId);
     try {
+        setButtonLoading(sendBtn, true, 'Đang gửi...');
         await postRef.update({
             comments: firebase.firestore.FieldValue.arrayUnion({
                 user: userName, // Sử dụng tên vừa lấy được
                 userEmail,
-                avatar: avatar,
                 text: text,
-                time: Date.now()
+                time: Date.now(),
+                createdAt: Date.now()
             })
         });
         input.value = ""; 
@@ -3509,7 +4455,9 @@ async function addComment(postId) {
         }
     } catch (error) {
         console.error("Lỗi khi gửi bình luận: ", error);
-        alert("Không thể gửi bình luận, vui lòng thử lại!");
+        showSystemToast('Không thể gửi bình luận, vui lòng thử lại!', { icon: '⚠️', title: 'Lỗi bình luận' });
+    } finally {
+        setButtonLoading(sendBtn, false);
     }
 }
 
@@ -3521,8 +4469,8 @@ function checkCommentEnter(e, postId) {
 }
 
 
-// 3. Hàm Thả Tim/Haha (Cập nhật lên Firebase)
-async function handleReact(postId, type) {
+// Legacy reaction handler (đã thay bằng phiên bản mới ở phía dưới file).
+async function handleReactLegacy(postId, type) {
     const postRef = db.collection("posts").doc(postId);
     const increment = firebase.firestore.FieldValue.increment(1);
 
@@ -3588,49 +4536,26 @@ async function checkPassword() {
     if (!loginIdentifier || !password) return showAuthMessage('Vui lòng nhập email hoặc số điện thoại cùng mật khẩu để đăng nhập.');
 
     try {
-        const [emailSnap, phoneSnap] = await Promise.all([
-            db.collection('users')
-                .where('email', '==', normalizedIdentifier)
-                .where('password', '==', password)
-                .limit(1)
-                .get(),
-            db.collection('users')
-                .where('phone', '==', loginIdentifier)
-                .where('password', '==', password)
-                .limit(1)
-                .get()
-        ]);
-
-        let account = null;
-        if (!emailSnap.empty) {
-            account = emailSnap.docs[0].data();
-        } else if (!phoneSnap.empty) {
-            account = phoneSnap.docs[0].data();
-        } else {
-            const accounts = getSavedAccounts();
-            account = accounts.find((a) =>
-                (a.email === normalizedIdentifier || a.phone === loginIdentifier) && a.password === password
-            ) || null;
+        let emailForLogin = normalizedIdentifier;
+        if (!normalizedIdentifier.includes('@')) {
+            const phoneSnap = await db.collection('users').where('phone', '==', loginIdentifier).limit(1).get();
+            if (phoneSnap.empty) {
+                return showAuthMessage('Sai email/số điện thoại hoặc mật khẩu. Vui lòng thử lại.');
+            }
+            emailForLogin = String(phoneSnap.docs[0].data()?.email || '').trim().toLowerCase();
+            if (!emailForLogin) {
+                return showAuthMessage('Tài khoản chưa có email hợp lệ để đăng nhập.');
+            }
         }
 
-        if (!account) return showAuthMessage('Sai email/số điện thoại hoặc mật khẩu. Vui lòng thử lại.');   
-
-        const sessionUser = normalizeUserAvatar({
-            name: account.name,
-            phone: account.phone,
-            email: account.email,
-            avatar: account.avatar,
-            nickname: account.nickname || '',
-            classRole: account.classRole || '',
-            birthYear: account.birthYear || null
-        });
-        localStorage.setItem(SESSION_KEY, JSON.stringify(sessionUser));
-        localStorage.setItem('class_user_name', account.name);
+        await auth.signInWithEmailAndPassword(emailForLogin, password);
+        await cleanupLegacyPasswordField(emailForLogin);
+        const account = await getUserProfileByEmail(emailForLogin);
+        setCurrentUser(account || { email: emailForLogin });
         showAuthMessage('Đăng nhập thành công!', false);
-        startIntroExperienceAfterLogin();
     } catch (error) {
         console.error('Lỗi đăng nhập Firebase:', error);
-        showAuthMessage('Không đăng nhập được do lỗi kết nối Firebase.');
+        showAuthMessage(mapFirebaseAuthError(error));
     }
 }
 
@@ -3682,7 +4607,7 @@ function renderLightboxMedia(item) {
 }
 
 function preloadLightboxNeighbors(index) {
-    const candidates = [galleryMediaItems[index - 1], galleryMediaItems[index + 1]].filter(Boolean);
+    const candidates = [lightboxActiveItems[index - 1], lightboxActiveItems[index + 1]].filter(Boolean);
     candidates.forEach((item) => {
         if (item.isVideo || !item.url) return;
         const img = new Image();
@@ -3690,26 +4615,57 @@ function preloadLightboxNeighbors(index) {
     });
 }
 
-function openLightboxByIndex(index) {
-    if (!Array.isArray(galleryMediaItems) || !galleryMediaItems[index]) return;
+function gatherCurrentMediaItems(clickedElement = null) {
+    const mediaElements = Array.from(document.querySelectorAll('.media-wrap img, .media-wrap video'));
+    const items = mediaElements.map((el) => {
+        const isVideo = el.tagName.toLowerCase() === 'video';
+        const srcFromData = isVideo ? (el.getAttribute('data-src') || '') : (el.getAttribute('data-full-src') || '');
+        const srcFromNode = isVideo ? (el.currentSrc || el.getAttribute('src') || '') : (el.getAttribute('src') || el.currentSrc || '');
+        const url = srcFromData || srcFromNode;
+        return { url, isVideo, element: el };
+    }).filter((item) => !!item.url);
 
-    currentLightboxIndex = index;
+    const clickedIndex = clickedElement
+        ? items.findIndex((item) => item.element === clickedElement || item.element.closest('.video-preview-container') === clickedElement)
+        : -1;
+    return { items, clickedIndex };
+}
+
+function openLightboxByIndex(index, sourceElement = null) {
+    const { items, clickedIndex } = gatherCurrentMediaItems(sourceElement);
+    if (!items.length) return;
+    lightboxActiveItems = items.map(({ url, isVideo }) => ({ url, isVideo }));
+    const resolvedIndex = clickedIndex >= 0 ? clickedIndex : index;
+    if (!lightboxActiveItems[resolvedIndex]) return;
+
+    currentLightboxIndex = resolvedIndex;
     lightboxZoom = 1;
     lightboxRotation = 0;
 
     const lightbox = document.getElementById('lightbox');
     if (!lightbox) return;
 
-    renderLightboxMedia(galleryMediaItems[index]);
-    preloadLightboxNeighbors(index);
+    renderLightboxMedia(lightboxActiveItems[resolvedIndex]);
+    preloadLightboxNeighbors(resolvedIndex);
     lightbox.style.display = 'flex';
     document.body.classList.add('lightbox-open');
     syncOverlayUIState();
 }
 
-function openLightbox(url, isVideo) {
-    galleryMediaItems = [{ url, isVideo: !!isVideo }];
-    openLightboxByIndex(0);
+function openLightbox(url, isVideo, sourceElement = null) {
+    if (sourceElement) {
+        openLightboxByIndex(-1, sourceElement);
+        return;
+    }
+    lightboxActiveItems = [{ url, isVideo: !!isVideo }];
+    currentLightboxIndex = 0;
+    const lightbox = document.getElementById('lightbox');
+    if (!lightbox) return;
+    renderLightboxMedia(lightboxActiveItems[0]);
+    preloadLightboxNeighbors(0);
+    lightbox.style.display = 'flex';
+    document.body.classList.add('lightbox-open');
+    syncOverlayUIState();
 }
 
 function closeLightbox() {
@@ -3800,7 +4756,7 @@ async function handleProfileAvatarFileChange(event) {
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
-        alert('Vui lòng chọn file ảnh hợp lệ.');
+        showSystemToast('Vui lòng chọn file ảnh hợp lệ.', { icon: '⚠️', title: 'File không hợp lệ' });
         event.target.value = '';
         return;
     }
@@ -3823,13 +4779,13 @@ async function handleProfileAvatarFileChange(event) {
         if (preview) preview.src = dataUrl;
     } catch (error) {
         console.error('Lỗi xử lý ảnh avatar:', error);
-        alert('Không thể xử lý ảnh. Vui lòng thử ảnh khác hoặc dùng link ảnh.');
+        showSystemToast('Không thể xử lý ảnh. Vui lòng thử ảnh khác hoặc dùng link ảnh.', { icon: '⚠️', title: 'Lỗi ảnh avatar' });
     }
 }
 
 function openProfileModal() {
     const user = normalizeUserAvatar(getCurrentUser());
-    if (!user) return alert('Bạn cần đăng nhập để xem hồ sơ.');
+    if (!user) return showSystemToast('Bạn cần đăng nhập để xem hồ sơ.', { icon: '🔒', title: 'Chưa đăng nhập' });
 
     document.getElementById('profile-name').value = user.name || '';
     document.getElementById('profile-nickname').value = user.nickname || '';
@@ -3840,7 +4796,9 @@ function openProfileModal() {
     document.getElementById('profile-avatar').value = user.avatar || buildAvatarUrl(user.name);
     document.getElementById('profile-avatar-preview').src = user.avatar || buildAvatarUrl(user.name);
     const fileInput = document.getElementById('profile-avatar-file');
+    const deleteBtn = document.getElementById('delete-account-btn');
     if (fileInput) fileInput.value = '';
+    if (deleteBtn) deleteBtn.style.display = user?.email ? 'block' : 'none';
     document.getElementById('profile-modal').style.display = 'flex';
     closeTopQuickMenu();
     syncOverlayUIState();
@@ -3869,14 +4827,13 @@ function closeTopQuickMenu() {
 
 function showAccountDataSummary() {
     const currentUser = getCurrentUser() || {};
-    const accounts = getSavedAccounts();
     const text = [
         `Tài khoản hiện tại: ${currentUser.name || currentUser.email || 'Chưa có'}`,
         `Email: ${currentUser.email || '---'}`,
         `SĐT: ${currentUser.phone || '---'}`,
-        `Số tài khoản đã lưu cục bộ: ${accounts.length}`
+        'Đăng nhập được quản lý bởi Firebase Auth'
     ].join('\n');
-    alert(text);
+    showSystemToast(text, { icon: 'ℹ️', title: 'Thông tin tài khoản' });
 }
 
 function syncOverlayUIState() {
@@ -3886,12 +4843,17 @@ function syncOverlayUIState() {
     const isProfileOpen = document.getElementById('profile-modal')?.style.display === 'flex';
     const isLetterOpen = document.getElementById('letter-modal')?.style.display === 'flex';
     const isChatSelectorOpen = document.getElementById('chat-selector-modal')?.style.display === 'flex';
+    const isForgotPasswordOpen = document.getElementById('forgot-password-modal')?.style.display === 'flex';
+    const isChangePasswordOpen = document.getElementById('change-password-modal')?.style.display === 'flex';
+    const isDeleteAccountOpen = document.getElementById('delete-account-modal')?.style.display === 'flex';
+    const isStoryViewersOpen = document.getElementById('story-viewers-modal')?.style.display === 'flex';
+    const isInstallGuideOpen = document.getElementById('install-guide-modal')?.style.display === 'flex';
     const isChatActionSheetOpen = document.getElementById('chat-action-sheet')?.style.display === 'flex';
     const isGroupActionSheetOpen = document.getElementById('group-action-sheet')?.style.display === 'flex';
     const isChatOpen = document.getElementById('chat-panel')?.classList.contains('show')
         || document.getElementById('group-chat-panel')?.classList.contains('show');
     const isTopMenuOpen = document.getElementById('nav-menu-modal')?.style.display === 'flex';
-    body.classList.toggle('ui-overlay-active', !!(isLightboxOpen || isProfileOpen || isLetterOpen || isChatSelectorOpen || isChatActionSheetOpen || isGroupActionSheetOpen || isChatOpen || isTopMenuOpen));
+    body.classList.toggle('ui-overlay-active', !!(isLightboxOpen || isProfileOpen || isLetterOpen || isChatSelectorOpen || isForgotPasswordOpen || isChangePasswordOpen || isDeleteAccountOpen || isStoryViewersOpen || isInstallGuideOpen || isChatActionSheetOpen || isGroupActionSheetOpen || isChatOpen || isTopMenuOpen));
 }
 
 async function refreshWebApp() {
@@ -3928,7 +4890,7 @@ async function saveProfile() {
     const avatarInput = document.getElementById('profile-avatar').value.trim();
     const avatar = avatarInput || buildAvatarUrl(name || user.name);
 
-    if (!name || !phone) return alert('Vui lòng nhập đầy đủ họ tên và số điện thoại.');
+    if (!name || !phone) return showSystemToast('Vui lòng nhập đầy đủ họ tên và số điện thoại.', { icon: '⚠️', title: 'Thiếu thông tin' });
 
     try {
         const snap = await db.collection('users').where('email', '==', user.email).limit(1).get();
@@ -3939,43 +4901,31 @@ async function saveProfile() {
                 avatar,
                 nickname,
                 classRole,
-                birthYear: birthYear || null
+                birthYear: birthYear || null,
+                password: firebase.firestore.FieldValue.delete()
             });
         }
 
-        const accounts = getSavedAccounts();
-        const idx = accounts.findIndex((a) => a.email === user.email);
-        if (idx !== -1) {
-            accounts[idx].name = name;
-            accounts[idx].phone = phone;
-            accounts[idx].avatar = avatar;
-            accounts[idx].nickname = nickname;
-            accounts[idx].classRole = classRole;
-            accounts[idx].birthYear = birthYear || null;
-            saveAccounts(accounts);
-        }
-
         const updated = { ...user, name, phone, avatar, nickname, classRole, birthYear: birthYear || null };
-        localStorage.setItem(SESSION_KEY, JSON.stringify(updated));
-        localStorage.setItem('class_user_name', name);
-        await syncUserAvatarInAllComments(user.email, oldName, name, avatar);
+        setCurrentUser(updated);
         updateCurrentUserDisplay();
         closeProfileModal();
-        alert('Đã cập nhật hồ sơ thành công!');
+        showSystemToast('Đã cập nhật hồ sơ thành công!', { icon: '✅', title: 'Cập nhật thành công' });
     } catch (error) {
         console.error('Lỗi cập nhật hồ sơ:', error);
-        alert('Không thể cập nhật hồ sơ. Vui lòng thử lại.');
+        showSystemToast('Không thể cập nhật hồ sơ. Vui lòng thử lại.', { icon: '⚠️', title: 'Lỗi cập nhật hồ sơ' });
     }
 }
 
 // Hàm xử lý thả cảm xúc (Lưu danh sách tên)
-async function handleReact(postId, type) {
+async function handleReact(postId, type, sourceBtn = null) {
     const userName = getUserName(); // Lấy tên người dùng đã lưu hoặc hỏi tên
     const postRef = db.collection("posts").doc(postId);
     
     const field = type === 'hearts' ? 'heartUsers' : 'hahaUsers';
 
     try {
+        setButtonLoading(sourceBtn, true, 'Đang xử lý...');
         const doc = await postRef.get();
         const data = doc.data();
         const userList = data[field] || [];
@@ -3993,6 +4943,9 @@ async function handleReact(postId, type) {
         }
     } catch (error) {
         console.error("Lỗi tương tác:", error);
+        showSystemToast('Không thể thả cảm xúc lúc này.', { icon: '⚠️', title: 'Lỗi tương tác' });
+    } finally {
+        setButtonLoading(sourceBtn, false);
     }
 }
 
@@ -4002,7 +4955,7 @@ async function sendTimeCapsule() {
     const msg = document.getElementById('capsule-message').value.trim();
     const unlockDateValue = document.getElementById('unlock-date-input').value; // Định dạng YYYY-MM-DD
     
-    if (!sender || !msg || !unlockDateValue) return alert("Vui lòng nhập đủ tên, lời nhắn và chọn ngày mở!");
+    if (!sender || !msg || !unlockDateValue) return showSystemToast('Vui lòng nhập đủ tên, lời nhắn và chọn ngày mở!', { icon: '⚠️', title: 'Thiếu thông tin' });
 
     try {
         await db.collection("messages").add({
@@ -4013,10 +4966,10 @@ async function sendTimeCapsule() {
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
         
-        alert("💌 Thư đã được khóa lại cho đến ngày " + unlockDateValue);
+        showSystemToast(`💌 Thư đã được khóa lại cho đến ngày ${unlockDateValue}`, { icon: '✅', title: 'Gửi thư thành công' });
         document.getElementById('capsule-message').value = '';
         document.getElementById('unlock-date-input').value = '';
-    } catch (e) { alert("Lỗi: " + e.message); }
+    } catch (e) { showSystemToast(`Lỗi: ${e.message}`, { icon: '⚠️', title: 'Không gửi được thư' }); }
 }
 
 
@@ -4277,20 +5230,20 @@ ${myText}`.trim();
 
 async function sendReplyToCapsuleAuthor() {
     const me = getCurrentUser();
-    if (!me?.email) return alert('Bạn cần đăng nhập để gửi tin nhắn.');
-    if (!currentOpenedLetter || !currentOpenedLetter.message) return alert('Không tìm thấy thông tin bức thư để phản hồi.');
+    if (!me?.email) return showSystemToast('Bạn cần đăng nhập để gửi tin nhắn.', { icon: '🔒', title: 'Chưa đăng nhập' });
+    if (!currentOpenedLetter || !currentOpenedLetter.message) return showSystemToast('Không tìm thấy thông tin bức thư để phản hồi.', { icon: '⚠️', title: 'Thiếu dữ liệu' });
 
     const input = document.getElementById('letter-reply-input');
     const replyText = input?.value.trim() || '';
-    if (!replyText) return alert('Hãy nhập lời nhắn trước khi gửi.');
+    if (!replyText) return showSystemToast('Hãy nhập lời nhắn trước khi gửi.', { icon: '⚠️', title: 'Nội dung trống' });
 
     const targetUser = await findUserForCapsuleReply(currentOpenedLetter);
     if (!targetUser?.email) {
-        return alert('Không tìm thấy tài khoản của người viết thư để mở chat riêng.');
+        return showSystemToast('Không tìm thấy tài khoản của người viết thư để mở chat riêng.', { icon: '⚠️', title: 'Không tìm thấy người nhận' });
     }
 
     if ((targetUser.email || '').toLowerCase() === (me.email || '').toLowerCase()) {
-        return alert('Đây là thư của bạn, không thể tự gửi tin nhắn cho chính mình.');
+        return showSystemToast('Đây là thư của bạn, không thể tự gửi tin nhắn cho chính mình.', { icon: 'ℹ️', title: 'Không thể gửi' });
     }
 
     openPrivateChatWithUser(targetUser);
@@ -4335,6 +5288,9 @@ function handleGlobalClick(event) {
     const chatSelector = document.getElementById('chat-selector-modal');
     const chatActionSheet = document.getElementById('chat-action-sheet');
     const groupActionSheet = document.getElementById('group-action-sheet');
+    const deleteAccountModal = document.getElementById('delete-account-modal');
+    const storyViewersModal = document.getElementById('story-viewers-modal');
+    const installGuideModal = document.getElementById('install-guide-modal');
 
     if (event.target === modal) closeLetter();
     if (event.target === profileModal) closeProfileModal();
@@ -4343,6 +5299,9 @@ function handleGlobalClick(event) {
     if (event.target === quickMenu) closeTopQuickMenu();
     if (event.target === chatActionSheet) closeChatActionSheet();
     if (event.target === groupActionSheet) closeGroupActionSheet();
+    if (event.target === deleteAccountModal) closeDeleteAccountDialog();
+    if (event.target === storyViewersModal) closeStoryViewersModal();
+    if (event.target === installGuideModal) closeInstallGuide();
 
     if (container && !container.contains(event.target)) {
         btn?.classList.remove('active');
@@ -4355,11 +5314,49 @@ function handleGlobalClick(event) {
 document.addEventListener('click', handleGlobalClick);
 
 document.addEventListener('keydown', (event) => {
-    const modal = document.getElementById('letter-modal');
-    if (!modal || modal.style.display !== 'flex') return;
-
-    if (event.key === 'Escape' || event.key.toLowerCase() === 'x') {
+    if (event.key !== 'Escape' && event.key.toLowerCase() !== 'x') return;
+    if (document.getElementById('lightbox')?.style.display === 'flex') {
+        closeLightbox();
+        return;
+    }
+    if (document.getElementById('letter-modal')?.style.display === 'flex') {
         closeLetter();
+        return;
+    }
+    if (document.getElementById('profile-modal')?.style.display === 'flex') {
+        closeProfileModal();
+        return;
+    }
+    if (document.getElementById('chat-selector-modal')?.style.display === 'flex') {
+        closeChatSelectorModal();
+        return;
+    }
+    if (document.getElementById('forgot-password-modal')?.style.display === 'flex') {
+        closeForgotPasswordDialog();
+        return;
+    }
+    if (document.getElementById('delete-account-modal')?.style.display === 'flex') {
+        closeDeleteAccountDialog();
+        return;
+    }
+    if (document.getElementById('story-viewers-modal')?.style.display === 'flex') {
+        closeStoryViewersModal();
+        return;
+    }
+    if (document.getElementById('install-guide-modal')?.style.display === 'flex') {
+        closeInstallGuide();
+        return;
+    }
+    if (document.getElementById('change-password-modal')?.style.display === 'flex') {
+        closeChangePasswordDialog();
+        return;
+    }
+    if (document.getElementById('confirm-modal')?.style.display === 'flex') {
+        document.getElementById('confirm-modal-cancel-btn')?.click();
+        return;
+    }
+    if (document.getElementById('nav-menu-modal')?.style.display === 'flex') {
+        closeNavMenuModal();
     }
 });
 
@@ -4370,11 +5367,26 @@ window.addEventListener('beforeinstallprompt', (event) => {
 
 window.addEventListener('appinstalled', () => {
     deferredInstallPrompt = null;
+    const installGuideBtn = document.querySelector('#profile-modal .profile-refresh-btn');
+    if (installGuideBtn) installGuideBtn.style.display = 'none';
+    closeInstallGuide();
     showSystemToast('Cài đặt web app thành công. Mở app từ màn hình chính để dùng như ứng dụng riêng.', {
         icon: '✅',
         title: 'Đã cài đặt ứng dụng'
     });
 });
+
+async function applyAuthenticatedSession(authUser) {
+    if (!authUser?.email) return;
+    const email = String(authUser.email || '').toLowerCase();
+    const profile = await getUserProfileByEmail(email).catch(() => null);
+    setCurrentUser(profile || { email, name: authUser.displayName || 'Thành viên lớp' });
+    updatePrivateChatHeader();
+    updateGroupChatHeaderAvatar();
+    updateCurrentUserDisplay();
+    await startIntroExperienceAfterLogin();
+    hideBootSplash();
+}
 
 function isRunningStandaloneMode() {
     return window.matchMedia?.('(display-mode: standalone)')?.matches || window.navigator.standalone === true;
@@ -4398,33 +5410,77 @@ function getInstallGuideMessage() {
     return 'Máy tính: mở trình duyệt Chrome/Edge → bấm biểu tượng cài đặt ở thanh địa chỉ để cài app desktop.';
 }
 
+function closeInstallGuide() {
+    const modal = document.getElementById('install-guide-modal');
+    if (modal) modal.style.display = 'none';
+    syncOverlayUIState();
+}
+
+function renderInstallGuideSteps() {
+    const stepsEl = document.getElementById('install-guide-steps');
+    if (!stepsEl) return;
+    const mode = detectDeviceType();
+    if (mode === 'ios') {
+        stepsEl.innerHTML = `
+            <article class="install-step-card">
+                <img src="./icons/install-guide-ios.svg" alt="Hướng dẫn cài đặt trên iPhone Safari">
+                <p>1) Mở Safari → 2) Nhấn Share → 3) Chọn <b>Add to Home Screen</b>.</p>
+            </article>`;
+        return;
+    }
+    if (mode === 'android') {
+        stepsEl.innerHTML = `
+            <article class="install-step-card">
+                <img src="./icons/install-guide-android.svg" alt="Hướng dẫn cài đặt trên Android Chrome">
+                <p>1) Mở Chrome → 2) Nhấn menu <b>⋮</b> → 3) Chọn <b>Install app</b>.</p>
+            </article>`;
+        return;
+    }
+    stepsEl.innerHTML = `<p class="members-empty">Trên máy tính: bấm biểu tượng cài app ở thanh địa chỉ (Chrome/Edge).</p>`;
+}
+
+async function triggerInstallPrompt() {
+    if (!deferredInstallPrompt) {
+        showSystemToast(getInstallGuideMessage(), { icon: 'ℹ️', title: 'Hướng dẫn cài ứng dụng' });
+        return;
+    }
+    deferredInstallPrompt.prompt();
+    const result = await deferredInstallPrompt.userChoice.catch(() => ({ outcome: 'dismissed' }));
+    if (result?.outcome !== 'accepted') {
+        showSystemToast('Bạn có thể cài lại bất cứ lúc nào từ menu trình duyệt.', { icon: 'ℹ️', title: 'Chưa cài đặt' });
+    } else {
+        closeInstallGuide();
+    }
+}
+
 async function showInstallGuide() {
-    const checks = [
-        `- HTTPS: ${window.isSecureContext ? 'OK' : 'Thiếu HTTPS'}`,
-        `- Service Worker: ${'serviceWorker' in navigator ? 'OK' : 'Không hỗ trợ'}`,
-        `- Manifest: ${!!document.querySelector('link[rel="manifest"]') ? 'OK' : 'Thiếu link manifest'}`,
-        `- Chế độ app hiện tại: ${isRunningStandaloneMode() ? 'Đang chạy dạng app' : 'Đang chạy trong trình duyệt'}`
-    ];
-
     if (isRunningStandaloneMode()) {
-        alert(`Ứng dụng đã được cài và đang chạy dạng app.\n\nChecklist:\n${checks.join('\n')}`);
+        showSystemToast('Ứng dụng đã được cài và đang chạy dạng app.', { icon: '✅', title: 'Đã cài đặt ứng dụng' });
         return;
     }
 
-    if (deferredInstallPrompt) {
-        deferredInstallPrompt.prompt();
-        const result = await deferredInstallPrompt.userChoice.catch(() => ({ outcome: 'dismissed' }));
-        if (result?.outcome !== 'accepted') {
-            alert(`${getInstallGuideMessage()}\n\nChecklist:\n${checks.join('\n')}`);
-        }
-        return;
-    }
+    const modal = document.getElementById('install-guide-modal');
+    const status = document.getElementById('install-guide-status');
+    const ctaBtn = document.getElementById('install-guide-cta-btn');
+    if (!modal || !status || !ctaBtn) return;
 
-    alert(`${getInstallGuideMessage()}\n\nChecklist:\n${checks.join('\n')}`);
+    status.innerHTML = [
+        `HTTPS: <b>${window.isSecureContext ? 'OK' : 'Thiếu HTTPS'}</b>`,
+        `Service Worker: <b>${'serviceWorker' in navigator ? 'OK' : 'Không hỗ trợ'}</b>`,
+        `Manifest: <b>${document.querySelector('link[rel="manifest"]') ? 'OK' : 'Thiếu'}</b>`
+    ].join(' • ');
+    ctaBtn.style.display = deferredInstallPrompt ? 'inline-flex' : 'none';
+    renderInstallGuideSteps();
+    modal.style.display = 'flex';
+    syncOverlayUIState();
 }
 
 window.addEventListener('DOMContentLoaded', () => {
+    showBootSplash();
+    document.getElementById('password-screen').style.display = 'none';
+    document.getElementById('main-content').style.display = 'none';
     initThemeMode();
+    initAOSWhenIdle();
     initPasswordToggles();
     setupFirebaseMessaging().catch((error) => {
         console.warn('Bỏ qua khởi tạo FCM:', error);
@@ -4489,20 +5545,36 @@ window.addEventListener('DOMContentLoaded', () => {
     chatUserSearchInput?.addEventListener('focus', () => {
         clearChatSearchAutofill(chatUserSearchInput);
     });
+    chatUserSearchInput?.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+        }
+    });
 
     clearChatSearchAutofill(chatUserSearchInput);
     setTimeout(() => clearChatSearchAutofill(chatUserSearchInput), 300);
     setTimeout(() => clearChatSearchAutofill(chatUserSearchInput), 1200);
 
     setupMobileChatKeyboardBehavior();
+    setupViewportKeyboardGuard();
+    document.body.classList.toggle('standalone-mode', isRunningStandaloneMode());
+    const installGuideBtn = document.querySelector('#profile-modal .profile-refresh-btn');
+    if (installGuideBtn && isRunningStandaloneMode()) {
+        installGuideBtn.style.display = 'none';
+    }
 
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.addEventListener('message', (event) => {
-            if (event?.data?.type !== 'OPEN_GROUP_CHAT_FROM_PUSH') return;
-
-            const panel = document.getElementById('group-chat-panel');
-            if (!panel?.classList.contains('show')) {
-                toggleGroupChatPanel();
+            const msgType = event?.data?.type || '';
+            if (msgType === 'OPEN_GROUP_CHAT_FROM_PUSH') {
+                const panel = document.getElementById('group-chat-panel');
+                if (!panel?.classList.contains('show')) {
+                    toggleGroupChatPanel();
+                }
+                return;
+            }
+            if (msgType === 'SW_UPDATE_READY' && navigator.serviceWorker.controller) {
+                notifyServiceWorkerUpdateReady(pendingSWRegistration);
             }
         });
     }
@@ -4511,8 +5583,20 @@ window.addEventListener('DOMContentLoaded', () => {
         Notification.requestPermission().catch(() => {});
     }
 
-    window.addEventListener('online', updateMyPresence);
-    window.addEventListener('offline', updateMyPresence);
+    const onOffline = () => {
+        setNetworkOfflineBanner(true);
+        updateMyPresence();
+        showSystemToast('Mất kết nối mạng. Một số tính năng có thể tạm gián đoạn.', { icon: '📡', title: 'Offline' });
+    };
+    const onOnline = () => {
+        setNetworkOfflineBanner(false);
+        updateMyPresence();
+        refreshDataAfterReconnect();
+        showSystemToast('Kết nối mạng đã trở lại.', { icon: '✅', title: 'Online' });
+    };
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    setNetworkOfflineBanner(!navigator.onLine);
     document.addEventListener('visibilitychange', () => {
         document.body.classList.toggle('tab-hidden', document.hidden);
         const hasSession = !!getCurrentUser();
@@ -4535,15 +5619,38 @@ window.addEventListener('DOMContentLoaded', () => {
         pauseMusicForBackground({ reset: true });
     });
     
-    const user = getCurrentUser();
-    if (user) {
-        enterMainSite();
-    } else {
-        switchAuthTab('login');
-    }
-    updatePrivateChatHeader();
-    updateGroupChatHeaderAvatar();
-    updateCurrentUserDisplay();
+    auth.onAuthStateChanged(async (authUser) => {
+        if (!authUser?.email) {
+            hasEnteredMainSite = false;
+            setCurrentUser(null);
+            document.getElementById('main-content').style.display = 'none';
+            document.getElementById('password-screen').style.display = 'flex';
+            switchAuthTab('login');
+            updatePrivateChatHeader();
+            updateGroupChatHeaderAvatar();
+            updateCurrentUserDisplay();
+            hideBootSplash();
+            authStateReady = true;
+            return;
+        }
+        try {
+            await applyAuthenticatedSession(authUser);
+        } catch (error) {
+            console.error('Khôi phục phiên đăng nhập thất bại:', error);
+            hasEnteredMainSite = false;
+            document.getElementById('main-content').style.display = 'none';
+            document.getElementById('password-screen').style.display = 'flex';
+            switchAuthTab('login');
+            hideBootSplash();
+        }
+        authStateReady = true;
+    });
+
+    window.addEventListener('pageshow', async () => {
+        const authUser = auth.currentUser;
+        if (!authUser?.email) return;
+        await applyAuthenticatedSession(authUser);
+    });
 });
 
 window.toggleDarkMode = toggleDarkMode;
