@@ -79,11 +79,24 @@
         </div>
     </div>
 
+    <div id="profile-confirm-modal" class="profile-confirm-modal" style="display:none;">
+        <div class="profile-confirm-content">
+            <h3 id="profile-confirm-title">Xác nhận thao tác</h3>
+            <p id="profile-confirm-message">Bạn có chắc chắn muốn tiếp tục?</p>
+            <div class="profile-confirm-actions">
+                <button id="profile-confirm-ok" type="button">Đồng ý</button>
+                <button id="profile-confirm-cancel" type="button">Hủy</button>
+            </div>
+        </div>
+    </div>
+
 
     <input id="commentMediaInput" type="file" accept="image/*" hidden>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-storage.js"></script>
+    <script src="./firebase-init.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/glightbox/dist/js/glightbox.min.js"></script>
     <script src="./profile.js"></script>
 </body>
