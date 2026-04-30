@@ -13,7 +13,8 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-const APP_CACHE = 'kyniemlop-app-shell-v4';
+const APP_CACHE = 'kyniemlop-app-shell-v6';
+const IMAGE_CACHE = 'kyniemlop-images-v2';
 const APP_SHELL_ASSETS = [
     './',
     './index.html',
@@ -21,7 +22,11 @@ const APP_SHELL_ASSETS = [
     './script.js',
     './manifest.json',
     './icons/icon-192.svg',
-    './icons/icon-512.svg'
+    './icons/icon-512.svg',
+    './icons/icon-192-maskable.svg',
+    './icons/icon-512-maskable.svg',
+    './icons/install-guide-ios.svg',
+    './icons/install-guide-android.svg'
 ];
 
 const DEFAULT_ICON = 'https://www.gstatic.com/mobilesdk/160503_mobilesdk/logo/2x/firebase_28dp.png';
@@ -32,14 +37,20 @@ self.addEventListener('install', (event) => {
     event.waitUntil((async () => {
         const cache = await caches.open(APP_CACHE);
         await cache.addAll(APP_SHELL_ASSETS);
-        await self.skipWaiting();
+        const openClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+        openClients.forEach((client) => {
+            client.postMessage({
+                type: 'SW_UPDATE_READY',
+                payload: { cache: APP_CACHE, at: Date.now() }
+            });
+        });
     })());
 });
 
 self.addEventListener('activate', (event) => {
     event.waitUntil((async () => {
         const keys = await caches.keys();
-        await Promise.all(keys.filter((k) => k !== APP_CACHE).map((k) => caches.delete(k)));
+        await Promise.all(keys.filter((k) => ![APP_CACHE, IMAGE_CACHE].includes(k)).map((k) => caches.delete(k)));
         await self.clients.claim();
     })());
 });
@@ -50,6 +61,7 @@ self.addEventListener('fetch', (event) => {
 
     const url = new URL(req.url);
     if (url.origin !== self.location.origin) return;
+    const isImage = req.destination === 'image';
 
     const isAppShell = req.mode === 'navigate'
         || ['/index.html', '/style.css', '/script.js', '/manifest.json'].includes(url.pathname);
@@ -58,14 +70,36 @@ self.addEventListener('fetch', (event) => {
         const cache = await caches.open(APP_CACHE);
 
         if (isAppShell) {
+            const cached = await caches.match(req);
+            const fetchAndRefresh = fetch(req, { cache: 'no-cache' })
+                .then((fresh) => {
+                    cache.put(req, fresh.clone());
+                    return fresh;
+                })
+                .catch(() => null);
+            if (cached) {
+                event.waitUntil(fetchAndRefresh);
+                return cached;
+            }
+            const fresh = await fetchAndRefresh;
+            if (fresh) return fresh;
+            const fallback = await caches.match('./index.html');
+            return fallback || Response.error();
+        }
+
+        if (isImage) {
+            const imageCache = await caches.open(IMAGE_CACHE);
+            const cachedImage = await imageCache.match(req);
+            if (cachedImage) {
+                event.waitUntil(fetch(req).then((fresh) => imageCache.put(req, fresh.clone())).catch(() => {}));
+                return cachedImage;
+            }
             try {
-                const fresh = await fetch(req, { cache: 'no-cache' });
-                cache.put(req, fresh.clone());
+                const fresh = await fetch(req);
+                imageCache.put(req, fresh.clone());
                 return fresh;
-            } catch (e) {
-                const cached = await caches.match(req);
-                const fallback = await caches.match('./index.html');
-                return cached || fallback || Response.error();
+            } catch (_) {
+                return Response.error();
             }
         }
 
