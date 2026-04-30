@@ -68,6 +68,50 @@ body.dark-mode {
     z-index: 9999;
 }
 
+.app-splash-screen {
+    position: fixed;
+    inset: 0;
+    z-index: 14000;
+    background: #e6e6e6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: opacity .32s ease, visibility .32s ease;
+}
+
+.app-splash-screen.hidden {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.app-splash-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    animation: splashIn .5s ease;
+}
+
+.app-splash-logo {
+    width: min(300px, 72vw);
+    height: auto;
+    filter: drop-shadow(0 6px 14px rgba(0,0,0,.08));
+}
+
+.app-splash-year {
+    margin: 0;
+    font-size: clamp(30px, 5vw, 48px);
+    letter-spacing: 6px;
+    font-weight: 800;
+    color: #0a0a0a;
+}
+
+@keyframes splashIn {
+    from { transform: translateY(12px) scale(.98); opacity: .2; }
+    to { transform: translateY(0) scale(1); opacity: 1; }
+}
+
 .lock-box {
     background: rgba(255, 255, 255, 0.15);
     backdrop-filter: blur(15px);
@@ -529,7 +573,7 @@ body.dark-mode #intro-drive-player {
 
 header {
     text-align: center;
-    padding: 50px 20px;
+    padding: calc(50px + env(safe-area-inset-top, 0px)) 20px 50px;
     position: sticky;
     top: 0;
     z-index: 2200;
@@ -594,11 +638,15 @@ header h1 {
     transition: transform 0.3s;
     transform-style: preserve-3d;
     perspective: 1000px;
+    transform: translate3d(0, 0, 0);
+    content-visibility: auto;
+    contain-intrinsic-size: 420px 560px;
 }
 
 .card:hover {
     transform: scale(1.02); /* Phóng nhẹ khi di chuột */
     z-index: 10;
+    will-change: transform;
 }
 
 /* Điều chỉnh chiều cao tự nhiên */
@@ -775,6 +823,8 @@ body.lightbox-open .chat-toggle-btn {
     opacity: 0.8;
     pointer-events: none;
     animation: fall linear infinite, swing ease-in-out infinite;
+    will-change: transform;
+    transform: translate3d(0, 0, 0);
 }
 
 @keyframes fall {
@@ -1041,6 +1091,25 @@ body.lightbox-open .chat-toggle-btn {
     cursor: pointer;
 }
 
+.network-offline-banner {
+    position: fixed;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 13000;
+    background: #b91c1c;
+    color: #fff;
+    border-radius: 999px;
+    padding: 8px 14px;
+    font-weight: 700;
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28);
+}
+
+.btn-loading {
+    opacity: 0.78;
+    pointer-events: none;
+}
+
 .gallery-skeleton-grid {
     margin-top: 14px;
     display: grid;
@@ -1177,8 +1246,27 @@ body.lightbox-open .chat-toggle-btn {
     width: 0px; 
     height: 0px;
     transform-style: preserve-3d;
+    will-change: transform;
+    transform: translate3d(0, 0, 0);
     /* Không dùng margin ở đây để tránh lệch */
     animation: rotateCarousel 20s linear infinite;
+}
+
+#gallery-load-more-spinner {
+    animation: gallery-spinner 0.9s linear infinite;
+}
+
+@keyframes gallery-spinner {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+@media (max-width: 768px) {
+    .leaf,
+    #capsule-carousel-3d,
+    .card {
+        transform: translate3d(0, 0, 0);
+    }
 }
 
 @keyframes rotateCarousel {
@@ -2941,6 +3029,7 @@ header,
 }
 
 #main-content {
+    padding-top: env(safe-area-inset-top, 0px);
     padding-bottom: calc(78px + env(safe-area-inset-bottom, 0px));
 }
 
@@ -2957,6 +3046,16 @@ header,
     display: grid;
     grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: 2px;
+    transform: translateY(calc(-1 * var(--keyboard-offset, 0px)));
+    transition: transform 0.2s ease;
+}
+
+body.standalone-mode header {
+    top: 0;
+}
+
+body.keyboard-open .bottom-nav-fb {
+    transform: translateY(calc(-1 * var(--keyboard-offset, 0px)));
 }
 
 .bottom-nav-item {
@@ -3606,7 +3705,7 @@ body.ui-overlay-active #music-container {
     position: fixed;
     inset: 0;
     background: rgba(0,0,0,0.5);
-    z-index: 5100;
+    z-index: 12050;
     display: none;
     align-items: center;
     justify-content: center;
@@ -3632,6 +3731,13 @@ body.ui-overlay-active #music-container {
 
 .chat-selector-content .chat-selector-close {
     background: color-mix(in srgb, var(--danger) 16%, var(--surface));
+}
+
+.confirm-modal-content p {
+    margin: 0;
+    color: var(--text-secondary);
+    line-height: 1.45;
+    text-align: left;
 }
 
 .chat-panel.show {
@@ -3919,23 +4025,51 @@ body.dark-mode .group-chat-avatar {
 .notification-center-head button{border:none;background:#eef2ff;color:#3559e6;border-radius:999px;padding:6px 10px}
 .notification-item{padding:9px 8px;border-radius:10px;border:1px solid transparent;cursor:pointer}
 .notification-item.unread{background:#edf4ff;border-color:#cfe0ff}
-.story-strip{padding:8px 10px 4px}
-.story-scroll{display:flex;gap:8px;overflow:auto;padding-bottom:4px}
-.story-add-btn,.story-item{min-width:76px;height:112px;border:none;border-radius:14px;position:relative;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;padding:8px;color:#fff;background:linear-gradient(160deg,#2d66f6,#59a6ff)}
-.story-add-btn span{font-size:22px;line-height:1}
-.story-add-btn small{font-size:12px}
-.story-items{display:flex;gap:8px}
+.story-strip{padding:10px 12px 6px;display:flex;justify-content:center}
+.story-scroll{display:flex;gap:10px;overflow:auto;padding:4px 2px 8px;width:min(100%,980px);margin:0 auto}
+.story-add-btn,.story-item{min-width:82px;height:132px;border:none;border-radius:16px;position:relative;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;padding:9px;color:#fff;background:linear-gradient(160deg,#2d66f6,#59a6ff)}
+.story-add-btn{box-shadow:0 10px 24px rgba(40,90,235,.25)}
+.story-add-btn span{font-size:24px;line-height:1}
+.story-add-btn small{font-size:12px;font-weight:700}
+.story-items{display:flex;gap:10px}
 .story-item img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0}
+.story-item::after{content:'';position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.55),rgba(0,0,0,.05) 55%,rgba(0,0,0,.12));z-index:0}
 .story-item b{position:relative;z-index:1;font-size:11px;text-shadow:0 1px 2px rgba(0,0,0,.6)}
+.story-view-chip{position:relative;z-index:2;align-self:flex-start;margin-top:4px;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.55);border-radius:999px;padding:2px 7px;font-size:10px;font-weight:700;color:#fff;display:inline-flex;gap:4px;align-items:center}
+.story-delete-btn{position:absolute;top:8px;right:8px;z-index:3;width:28px;height:28px;border:none;border-radius:999px;background:rgba(0,0,0,.5);color:#fff;display:grid;place-items:center;cursor:pointer}
+.story-delete-btn:hover{background:rgba(189,18,18,.95)}
+.profile-form #delete-account-btn{background:#b91c1c;color:#fff}
+.profile-form #delete-account-btn:hover{background:#991b1b}
 .notification-bell{flex:0 0 34px !important;min-width:34px !important;max-width:34px !important;padding:0 !important}
 .story-items{display:flex;gap:8px;align-items:center}
-.story-empty{min-width:220px;height:112px;border-radius:14px;border:1px dashed rgba(255,255,255,.35);display:flex;align-items:center;justify-content:center;color:#c9d2e6;background:rgba(20,32,60,.45);padding:0 14px;text-align:center}
-.story-composer-content textarea{width:100%;min-height:74px;border:1px solid #dbe1ee;border-radius:10px;padding:10px;resize:vertical}
-.story-preview-box{width:100%;min-height:150px;border:1px dashed #c8d0e1;border-radius:12px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#f7f9ff;color:#69708a}
-.story-preview-box img,.story-preview-box video{width:100%;max-height:250px;object-fit:cover}
-.story-composer-actions{display:flex;justify-content:space-between;gap:8px;margin-top:8px}
-.story-upload-btn{display:inline-flex;align-items:center;gap:6px;border:1px solid #d5ddf0;border-radius:10px;padding:8px 10px;background:#f6f8ff}
-.story-composer-actions button{border:none;background:#2d66f6;color:#fff;border-radius:10px;padding:8px 14px;font-weight:600}
+.story-empty{min-width:260px;height:132px;border-radius:16px;border:1px dashed rgba(255,255,255,.35);display:flex;align-items:center;justify-content:center;color:#c9d2e6;background:rgba(20,32,60,.45);padding:0 16px;text-align:center}
+.story-composer-content{max-width:560px !important;padding:16px !important}
+.story-composer-subtitle{margin:0 0 10px;color:#5a6479;font-size:13px}
+.story-composer-content textarea{width:100%;min-height:86px;border:1px solid #dbe1ee;border-radius:12px;padding:12px;background:#fff;color:#0f172a;resize:vertical}
+.story-composer-content textarea:focus{outline:none;border-color:#4f7dff;box-shadow:0 0 0 3px rgba(79,125,255,.16)}
+.story-preview-box{width:100%;min-height:240px;border:1px solid #c8d0e1;border-radius:14px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:linear-gradient(180deg,#f6f8ff,#f0f5ff);color:#69708a}
+.story-preview-box img,.story-preview-box video{width:100%;max-height:320px;object-fit:cover}
+.story-composer-actions{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:10px}
+.story-upload-btn{display:inline-flex;align-items:center;gap:8px;border:1px solid #d5ddf0;border-radius:12px;padding:10px 12px;background:#f6f8ff;font-weight:600;color:#1e3a8a}
+.story-composer-actions button{border:none;background:linear-gradient(180deg,#2d66f6,#2556cf);color:#fff;border-radius:12px;padding:10px 16px;font-weight:700}
+.story-composer-close-btn{margin-top:8px}
+body.dark-mode .story-composer-subtitle{color:#adb9d1}
+body.dark-mode .story-composer-content textarea{background:#0f1a30;border-color:#2a3c5e;color:#dbe7ff}
+body.dark-mode .story-preview-box{background:linear-gradient(180deg,#0f1a30,#13223e);border-color:#2a3c5e;color:#9eb0d0}
+body.dark-mode .story-upload-btn{background:#162542;border-color:#2a3c5e;color:#c8d8ff}
+@media (min-width: 1024px){
+    .story-strip{padding-top:14px}
+    .story-scroll{justify-content:center}
+    .story-add-btn,.story-item{min-width:108px;height:168px}
+    .story-item b{font-size:12px}
+}
+.install-guide-content{max-width:540px}
+.install-guide-steps{display:grid;gap:10px}
+.install-step-card{border:1px solid #dbe4f2;border-radius:12px;padding:10px;background:#f8fbff}
+.install-step-card img{width:100%;border-radius:10px;display:block;border:1px solid #e2e8f0}
+.install-step-card p{margin:8px 0 0;color:#334155;font-size:13px}
+.install-guide-actions{display:flex;gap:8px;justify-content:flex-end}
+.install-guide-actions button{display:inline-flex;align-items:center;justify-content:center}
 
 /* ===== Performance tuning: pause hiệu ứng khi tab không hoạt động ===== */
 body.tab-hidden .leaf {
