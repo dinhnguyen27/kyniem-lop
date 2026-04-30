@@ -1,24 +1,11 @@
-const firebaseConfig = {
-    apiKey: "AIzaSyA1lkOgOfvmM49o4G4B8ZgoMglAPjNdD5w",
-    authDomain: "kyniemlop-d3404.firebaseapp.com",
-    projectId: "kyniemlop-d3404",
-    storageBucket: "kyniemlop-d3404.firebasestorage.app",
-    messagingSenderId: "824232517330",
-    appId: "1:824232517330:web:acf65afe55dac4d38b970b",
-    measurementId: "G-XG46M01K89"
-};
-if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
-const storage = firebase.storage();
-
-const SESSION_KEY = 'class_current_user';
+const { auth, db, storage } = window.firebaseServices;
 const THEME_MODE_KEY = 'class_theme_mode';
 const ONLINE_ACTIVE_WINDOW_MS = 120000;
 const REACTIONS = ['👍', '❤️', '🥰', '😆', '😮', '😢', '😡'];
 const params = new URLSearchParams(window.location.search);
 const profileId = (params.get('id') || '').trim().toLowerCase();
 const focusPostId = (params.get('post') || '').trim();
-const currentUser = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
+let currentUser = null;
 
 let profileDocRef = null;
 let profileUserData = null;
@@ -26,7 +13,8 @@ let cachedPosts = [];
 let lightbox = null;
 const interactionState = {};
 const interactionUnsubs = {};
-const replyDraft = {};
+let allChatUsers = [];
+let usersUnsubscribe = null;
 
 const el = {
     header: document.getElementById('profileHeader'),
@@ -49,6 +37,62 @@ const safeText = (v = '') => String(v || '').replace(/[&<>'"]/g, (c) => ({ '&': 
 const parseTs = (v) => typeof v?.toMillis === 'function' ? Number(v.toMillis() || 0) : (typeof v === 'number' ? v : 0);
 const buildAvatarUrl = (name = 'Thành viên lớp') => `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=ff7e5f&color=fff`;
 const isVideoUrl = (url = '') => /\.mp4|video\/upload|cloudinary/i.test(String(url));
+
+function resolveAvatarByCommentAuthor(commentData = {}) {
+    const email = String(commentData.userEmail || '').trim().toLowerCase();
+    if (email) {
+        const found = allChatUsers.find((u) => (u.email || '').toLowerCase() === email);
+        if (found?.avatar) return found.avatar;
+    }
+    return buildAvatarUrl(commentData.user || 'Bạn');
+}
+
+function showConfirmModalProfile(message = 'Bạn có chắc chắn muốn tiếp tục?') {
+    const modal = document.getElementById('profile-confirm-modal');
+    const messageEl = document.getElementById('profile-confirm-message');
+    const okBtn = document.getElementById('profile-confirm-ok');
+    const cancelBtn = document.getElementById('profile-confirm-cancel');
+    if (!modal || !messageEl || !okBtn || !cancelBtn) {
+        return Promise.resolve(window.confirm(message));
+    }
+    return new Promise((resolve) => {
+        messageEl.textContent = message;
+        modal.style.display = 'flex';
+        const cleanup = () => {
+            okBtn.removeEventListener('click', onOk);
+            cancelBtn.removeEventListener('click', onCancel);
+            modal.removeEventListener('click', onBackdrop);
+            modal.style.display = 'none';
+        };
+        const onOk = () => {
+            cleanup();
+            resolve(true);
+        };
+        const onCancel = () => {
+            cleanup();
+            resolve(false);
+        };
+        const onBackdrop = (event) => {
+            if (event.target === modal) onCancel();
+        };
+        okBtn.addEventListener('click', onOk);
+        cancelBtn.addEventListener('click', onCancel);
+        modal.addEventListener('click', onBackdrop);
+    });
+}
+
+async function resolveCurrentSessionUser() {
+    const authUser = auth.currentUser;
+    if (!authUser?.email) return null;
+    const email = String(authUser.email || '').trim().toLowerCase();
+    try {
+        const snap = await db.collection('users').where('email', '==', email).limit(1).get();
+        if (!snap.empty) {
+            return snap.docs[0].data() || { email };
+        }
+    } catch (_) {}
+    return { email, name: authUser.displayName || 'Thành viên lớp' };
+}
 
 function applyThemeFromMain() {
     const mode = localStorage.getItem(THEME_MODE_KEY) || 'light';
@@ -164,10 +208,11 @@ function renderCommentRow(postId, c) {
     const topIcons = Object.entries(reactions).filter(([, n]) => Number(n || 0) > 0).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([icon]) => `<span class="badge">${icon}</span>`).join('');
     const replies = Array.isArray(c.replies) ? c.replies : [];
     const canDelete = isOwnerViewing() || (c.userEmail || '').toLowerCase() === (currentUser?.email || '').toLowerCase();
+    const avatarUrl = resolveAvatarByCommentAuthor(c);
 
     return `
     <div class="post-comment-row">
-        <img src="${safeText(c.avatar || buildAvatarUrl(c.user || 'Bạn'))}" alt="avatar">
+        <img src="${safeText(avatarUrl)}" alt="avatar">
         <div style="flex:1;">
             <div class="post-comment"><strong>${safeText(c.user || 'Bạn')}</strong><br>${safeText(c.text || '')}${c.imageUrl ? `<br><img src="${safeText(c.imageUrl)}" alt="comment-image" style="width:100%;max-height:180px;object-fit:cover;border-radius:10px;margin-top:6px;">` : ''}</div>
             <div class="comment-meta">
@@ -178,11 +223,8 @@ function renderCommentRow(postId, c) {
                 <span class="reaction-icons comment-inline-reactions">${count ? `${topIcons} ${count}` : ''}</span>
             </div>
             <div id="comment-react-picker-${postId}-${c.id}" class="react-picker" style="display:none;" onmouseenter="showCommentReactionPicker('${postId}','${c.id}')" onmouseleave="hideCommentReactionPicker('${postId}','${c.id}')">${REACTIONS.map((icon) => `<button type="button" onclick="setCommentReaction('${postId}','${c.id}','${icon}')">${icon}</button>`).join('')}</div>
-            ${replies.map((r) => `<div class="post-comment-row" style="margin-top:6px;"><img src="${safeText(r.avatar || buildAvatarUrl(r.user || 'Bạn'))}" alt="avatar"><div class="post-comment" style="font-size:.82rem;"><strong>${safeText(r.user || 'Bạn')}</strong><br>${safeText(r.text || '')}</div></div>`).join('')}
-            <div id="reply-box-${postId}-${c.id}" class="reply-box" style="display:${replyDraft[`${postId}_${c.id}`] ? 'flex' : 'none'};">
-                <input id="reply-input-${postId}-${c.id}" type="text" placeholder="Viết trả lời..." value="${safeText(replyDraft[`${postId}_${c.id}`] || '')}">
-                <button type="button" onclick="submitReply('${postId}','${c.id}')">Gửi</button>
-            </div>
+            ${replies.map((r) => `<div class="post-comment-row" style="margin-top:6px;"><img src="${safeText(resolveAvatarByCommentAuthor(r))}" alt="avatar"><div class="post-comment" style="font-size:.82rem;"><strong>${safeText(r.user || 'Bạn')}</strong><br>${safeText(r.text || '')}</div></div>`).join('')}
+            <div id="reply-box-${postId}-${c.id}" class="reply-box" style="display:none;"></div>
         </div>
     </div>`;
 }
@@ -327,13 +369,13 @@ async function reloadPosts() {
 }
 
 async function deletePost(postId) {
-    if (!confirm('Xóa bài viết này?')) return;
+    if (!(await showConfirmModalProfile('Xóa bài viết này?'))) return;
     await db.collection('posts').doc(postId).delete();
     await reloadPosts();
 }
 
 async function removePostMedia(postId) {
-    if (!confirm('Xóa ảnh/video khỏi bài viết này?')) return;
+    if (!(await showConfirmModalProfile('Xóa ảnh/video khỏi bài viết này?'))) return;
     await db.collection('posts').doc(postId).set({ url: '' }, { merge: true });
     await reloadPosts();
 }
@@ -408,12 +450,20 @@ async function setCommentReaction(postId, commentId, icon) {
 }
 
 function toggleReplyBox(postId, commentId) {
-    const key = `${postId}_${commentId}`;
     const box = document.getElementById(`reply-box-${postId}-${commentId}`);
     if (!box) return;
     const show = box.style.display === 'none';
-    box.style.display = show ? 'flex' : 'none';
-    if (show) document.getElementById(`reply-input-${postId}-${commentId}`)?.focus();
+    if (!show) {
+        box.style.display = 'none';
+        box.innerHTML = '';
+        return;
+    }
+    box.style.display = 'flex';
+    box.innerHTML = `
+        <input id="reply-input-${postId}-${commentId}" type="text" placeholder="Viết trả lời...">
+        <button type="button" onclick="submitReply('${postId}','${commentId}')">Gửi</button>
+    `;
+    document.getElementById(`reply-input-${postId}-${commentId}`)?.focus();
 }
 
 async function submitReply(postId, commentId) {
@@ -424,12 +474,25 @@ async function submitReply(postId, commentId) {
     await ref.set({
         replies: firebase.firestore.FieldValue.arrayUnion({
             user: currentUser?.name || currentUser?.email || 'Khách',
-            avatar: currentUser?.avatar || buildAvatarUrl(currentUser?.name || 'Bạn'),
+            userEmail: currentUser?.email || '',
             text,
             createdAt: Date.now()
         })
     }, { merge: true });
     input.value = '';
+    const box = document.getElementById(`reply-box-${postId}-${commentId}`);
+    if (box) {
+        box.style.display = 'none';
+        box.innerHTML = '';
+    }
+}
+
+function initUsersCache() {
+    if (usersUnsubscribe) usersUnsubscribe();
+    usersUnsubscribe = db.collection('users').onSnapshot((snap) => {
+        allChatUsers = snap.docs.map((doc) => ({ ...(doc.data() || {}) }));
+        if (cachedPosts.length) renderPosts(cachedPosts);
+    }, () => {});
 }
 
 function insertEmoji(postId, emoji) {
@@ -495,7 +558,7 @@ function cancelCommentReactionHold(postId, commentId) {
 }
 
 async function deleteComment(postId, commentId) {
-    if (!confirm('Xóa bình luận này?')) return;
+    if (!(await showConfirmModalProfile('Xóa bình luận này?'))) return;
     await db.collection('posts').doc(postId).collection('comments').doc(commentId).delete();
 }
 
@@ -607,10 +670,20 @@ function watchPresence() {
 }
 
 async function initProfilePage() {
+    currentUser = await resolveCurrentSessionUser();
+    auth.onAuthStateChanged(async () => {
+        currentUser = await resolveCurrentSessionUser();
+        if (profileUserData) {
+            renderProfileHeader(profileUserData);
+            renderPosts(cachedPosts);
+            renderInfo(profileUserData, cachedPosts);
+        }
+    });
     applyThemeFromMain();
     bindTabs();
     bindHeaderEffects();
     wireEvents();
+    initUsersCache();
     renderHeaderSkeleton();
 
     const user = await resolveProfileUser();
