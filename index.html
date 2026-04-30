@@ -11,7 +11,7 @@
     <meta name="twitter:title" content="Hành Trình Thanh Xuân - Kỷ Niệm Lớp">
 
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ff7e5f">
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#12151d">
     <meta name="mobile-web-app-capable" content="yes">
@@ -19,19 +19,34 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="Kỷ Niệm Lớp">
     <link rel="manifest" href="./manifest.json">
-    <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
     <link rel="icon" type="image/svg+xml" sizes="192x192" href="./icons/icon-192.svg">
-    <link rel="apple-touch-icon" sizes="192x192" href="./icons/icon-192.png">
+    <link rel="icon" type="image/svg+xml" sizes="512x512" href="./icons/icon-512.svg">
+    <link rel="apple-touch-icon" sizes="192x192" href="./icons/icon-192.svg">
     <title>Kỷ Niệm Lớp Chúng Mình</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com">
+    <link rel="preconnect" href="https://unpkg.com">
+    <link rel="preload" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"></noscript>
     <link rel="stylesheet" href="./style.css">
     <link rel="preconnect" href="https://drive.google.com">
     <link rel="preconnect" href="https://docs.googleusercontent.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Quicksand:wght@400;600&display=swap" rel="stylesheet">
-    <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <link rel="preload" href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Quicksand:wght@400;600&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Quicksand:wght@400;600&display=swap" rel="stylesheet"></noscript>
+    <link rel="preload" href="https://unpkg.com/aos@2.3.1/dist/aos.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet"></noscript>
+    <link rel="preload" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" as="style" onload="this.onload=null;this.rel='stylesheet'" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+    <noscript><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""></noscript>
 </head>
 <body>
+    <div id="app-splash-screen" class="app-splash-screen">
+        <div class="app-splash-card">
+            <img src="./icons/icon-512.svg" alt="AK16 splash logo" class="app-splash-logo" fetchpriority="high" decoding="async">
+            <p class="app-splash-year">2024-2026</p>
+        </div>
+    </div>
+    <div id="network-offline-banner" class="network-offline-banner" style="display:none;">📡 Mất kết nối mạng. Một số tính năng không khả dụng.</div>
     <div id="music-container">
         <div id="music-toast"></div>
     <button id="main-music-btn" onclick="toggleMusicMenu()">
@@ -74,6 +89,7 @@
                 <input type="password" id="login-password" placeholder="Mật khẩu">
                 <label class="password-toggle-row"><input type="checkbox" id="toggle-login-password"> Hiện mật khẩu</label>
                 <button onclick="checkPassword()">Đăng nhập vào web</button>
+                <button type="button" class="chip-optional-btn" onclick="openForgotPasswordDialog()">Quên mật khẩu?</button>
             </div>
 
             <div id="auth-register" class="auth-panel">
@@ -188,6 +204,12 @@
 
         <div class="gallery app-screen" data-screen="feed" id="galleryGrid">
             </div>
+        <div class="load-more-container app-screen" data-screen="feed">
+            <button id="gallery-load-more-btn" type="button" onclick="loadMoreGallery()" style="display:none; padding: 10px 25px; border-radius: 20px; border: none; background: #00f2fe; color: #333; font-weight: bold; cursor: pointer; align-items:center; gap:8px;">
+                Xem thêm
+                <span id="gallery-load-more-spinner" aria-hidden="true" style="display:none;">⏳</span>
+            </button>
+        </div>
 
         <section id="members-section" class="members-section app-screen" data-screen="members" style="display:none;">
             <div class="members-box">
@@ -255,9 +277,52 @@
             <h3>Tùy chọn nhanh</h3>
             <button id="enable-push-btn" class="chip-optional-btn" onclick="enablePushNotifications()">🔔 Bật thông báo đẩy</button>
             <button id="dark-mode-toggle" class="chip-optional-btn" onclick="toggleDarkMode()">🌙 Chế độ tối</button>
+            <button id="sw-update-btn" type="button" onclick="applyServiceWorkerUpdate()" style="display:none;">⬆️ Cập nhật phiên bản mới</button>
+            <button type="button" onclick="openChangePasswordDialog()">🔐 Đổi mật khẩu</button>
             <button type="button" onclick="refreshWebApp()">🔄 Làm mới web/app</button>
             <button type="button" onclick="logoutUser()">🚪 Đăng xuất</button>
             <button type="button" class="chat-selector-close" onclick="closeNavMenuModal()">Đóng</button>
+        </div>
+    </div>
+
+    <div id="forgot-password-modal" class="chat-selector-modal" style="display:none;">
+        <div class="chat-selector-content">
+            <h3>Quên mật khẩu</h3>
+            <input id="forgot-password-email" type="email" placeholder="Nhập email đã đăng ký">
+            <button type="button" onclick="submitForgotPassword()">Gửi email đặt lại mật khẩu</button>
+            <button type="button" class="chat-selector-close" onclick="closeForgotPasswordDialog()">Đóng</button>
+        </div>
+    </div>
+
+    <div id="change-password-modal" class="chat-selector-modal" style="display:none;">
+        <div class="chat-selector-content">
+            <h3>Đổi mật khẩu</h3>
+            <input id="change-password-old" type="password" placeholder="Mật khẩu hiện tại">
+            <input id="change-password-new" type="password" placeholder="Mật khẩu mới (ít nhất 6 ký tự)">
+            <input id="change-password-confirm" type="password" placeholder="Xác nhận mật khẩu mới">
+            <button type="button" onclick="submitChangePassword()">Cập nhật mật khẩu</button>
+            <button type="button" class="chat-selector-close" onclick="closeChangePasswordDialog()">Đóng</button>
+        </div>
+    </div>
+
+    <div id="confirm-modal" class="chat-selector-modal" style="display:none;">
+        <div class="chat-selector-content confirm-modal-content">
+            <h3 id="confirm-modal-title">Xác nhận</h3>
+            <p id="confirm-modal-message">Bạn có chắc chắn muốn thực hiện thao tác này?</p>
+            <button id="confirm-modal-ok-btn" type="button">Đồng ý</button>
+            <button id="confirm-modal-cancel-btn" type="button" class="chat-selector-close">Hủy</button>
+        </div>
+    </div>
+
+    <div id="install-guide-modal" class="chat-selector-modal" style="display:none;">
+        <div class="chat-selector-content install-guide-content">
+            <h3>Hướng dẫn cài ứng dụng</h3>
+            <p id="install-guide-status">Kiểm tra trạng thái PWA...</p>
+            <div class="install-guide-steps" id="install-guide-steps"></div>
+            <div class="install-guide-actions">
+                <button id="install-guide-cta-btn" type="button" onclick="triggerInstallPrompt()">Cài đặt ngay</button>
+                <button type="button" class="chat-selector-close" onclick="closeInstallGuide()">Đóng</button>
+            </div>
         </div>
     </div>
 
@@ -357,6 +422,7 @@
                 <input type="email" id="profile-email" placeholder="Email" readonly />
                 <button onclick="saveProfile()">Lưu thay đổi</button>
                 <button type="button" class="profile-refresh-btn" onclick="showInstallGuide()">📲 Hướng dẫn cài app</button>
+                <button type="button" id="delete-account-btn" onclick="openDeleteAccountDialog()" style="display:none;background:#b91c1c;color:#fff;">🗑️ Xóa tài khoản</button>
             </div>
         </div>
     </div>
@@ -400,6 +466,26 @@
                 <button type="button" onclick="submitStoryPost()">Đăng Story</button>
             </div>
             <button type="button" class="chat-selector-close" onclick="closeStoryComposerModal()">Đóng</button>
+        </div>
+    </div>
+
+    <div id="story-viewers-modal" class="chat-selector-modal" style="display:none;">
+        <div class="chat-selector-content">
+            <h3 id="story-viewers-title">Người đã xem story</h3>
+            <div id="story-viewers-list" class="notification-list">
+                <p class="members-empty">Đang tải danh sách người xem...</p>
+            </div>
+            <button type="button" class="chat-selector-close" onclick="closeStoryViewersModal()">Đóng</button>
+        </div>
+    </div>
+
+    <div id="delete-account-modal" class="chat-selector-modal" style="display:none;">
+        <div class="chat-selector-content">
+            <h3>Xóa tài khoản</h3>
+            <p style="margin:0;color:#b91c1c;">Hành động này không thể hoàn tác. Nhập mật khẩu hiện tại để xác nhận.</p>
+            <input id="delete-account-password" type="password" placeholder="Mật khẩu hiện tại">
+            <button type="button" onclick="submitDeleteAccount()">Xác nhận xóa tài khoản</button>
+            <button type="button" class="chat-selector-close" onclick="closeDeleteAccountDialog()">Hủy</button>
         </div>
     </div>
 
@@ -453,21 +539,15 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-storage.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-messaging.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/vanilla-tilt/1.8.1/vanilla-tilt.min.js"></script>
-    <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-    <script>
-      AOS.init({
-        duration: 1000, 
-        once: true      
-      });
-
-    </script>
-    <script src="./script.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <script defer src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script defer src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script defer src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <script defer src="https://www.gstatic.com/firebasejs/8.10.1/firebase-storage.js"></script>
+    <script defer src="./firebase-init.js"></script>
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/vanilla-tilt/1.8.1/vanilla-tilt.min.js"></script>
+    <script defer src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
+    <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script defer src="./script.js"></script>
 </body>
 </html>
